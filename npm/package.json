@@ -1,0 +1,49 @@
+{
+  "name": "stik-cli",
+  "version": "0.2.0",
+  "description": "Passive network watcher — tells you in plain English what's on your network, and taps you on the shoulder when something new shows up.",
+  "keywords": [
+    "network",
+    "security",
+    "arp",
+    "mdns",
+    "dhcp",
+    "passive",
+    "monitoring",
+    "devices",
+    "lan",
+    "cli"
+  ],
+  "license": "MIT",
+  "author": "Jack Adams-Lovell",
+  "homepage": "https://github.com/adamsjack711-ux/stik-cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adamsjack711-ux/stik-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/adamsjack711-ux/stik-cli/issues"
+  },
+  "bin": {
+    "stik": "bin/stik.js"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "scripts": {
+    "build": "./build.sh"
+  }
+}

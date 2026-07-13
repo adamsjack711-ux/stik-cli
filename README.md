@@ -29,6 +29,9 @@ Every other tool in this space — Wireshark, nmap, tcpdump — hands you **evid
 stik is a single Go binary. It uses `libpcap` for capture (bundled on macOS; `libpcap0.8` ships on most Linux desktops).
 
 ```bash
+# npm (macOS arm64 — ships a prebuilt binary, no toolchain needed)
+npm install -g stik-cli
+
 # from source (needs Go 1.26+ and libpcap headers) — installs a binary named `stik`
 go install github.com/adamsjack711-ux/stik-cli/cmd/stik@latest
 
