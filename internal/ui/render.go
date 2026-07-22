@@ -35,7 +35,11 @@ func Status(w io.Writer, s Style, devices []*model.Device, now time.Time) {
 	headline := fmt.Sprintf("%s new %s joined %s.",
 		numberWord(len(unknown)), plural(len(unknown), "device", "devices"), HumanSince(newest.FirstSeen, now))
 	fmt.Fprintf(w, "%s %s\n", s.Yellow("⚠"), s.Bold(headline))
-	fmt.Fprintf(w, "  %s, first seen %s.\n", newest.Display(), ClockTime(newest.FirstSeen))
+	if newest.IP != "" {
+		fmt.Fprintf(w, "  %s at %s, first seen %s.\n", newest.Display(), newest.IP, ClockTime(newest.FirstSeen))
+	} else {
+		fmt.Fprintf(w, "  %s, first seen %s.\n", newest.Display(), ClockTime(newest.FirstSeen))
+	}
 	if newest.Label != "" && newest.Name == "" {
 		fmt.Fprintf(w, "  %s\n", s.Dim(reasonFor(newest)))
 	}
