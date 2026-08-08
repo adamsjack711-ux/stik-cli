@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/adamsjack711-ux/stik-cli/internal/alert"
 	"github.com/adamsjack711-ux/stik-cli/internal/capture"
 	"github.com/adamsjack711-ux/stik-cli/internal/model"
-	"github.com/adamsjack711-ux/stik-cli/internal/notify"
 	"github.com/adamsjack711-ux/stik-cli/internal/registry"
 	"github.com/adamsjack711-ux/stik-cli/internal/scan"
 	"github.com/adamsjack711-ux/stik-cli/internal/ui"
@@ -68,7 +68,7 @@ func (a *app) cmdWatch() error {
 	return watchErr
 }
 
-func (a *app) cmdDaemon() error {
+func (a *app) cmdDaemon(notifySpecs []string) error {
 	reg, firstRun, err := a.load()
 	if err != nil {
 		return err
@@ -76,6 +76,12 @@ func (a *app) cmdDaemon() error {
 	if firstRun {
 		return errors.New("no baseline yet — run `stik` once to set one up before starting the daemon")
 	}
+
+	notifier, err := alert.Sinks(resolveNotifySpecs(notifySpecs))
+	if err != nil {
+		return err
+	}
+
 	cap, err := capture.Open("")
 	if err != nil {
 		return err
@@ -85,19 +91,38 @@ func (a *app) cmdDaemon() error {
 	ctx, cancel := signalContext()
 	defer cancel()
 
-	fmt.Fprintf(a.out, "%s watching %s — you'll get a desktop alert when a new device appears. Ctrl+C to stop.\n",
-		a.style.Green("stik daemon"), a.style.Cyan(cap.Interface()))
+	fmt.Fprintf(a.out, "%s watching %s — alerts via %s when a new device (or a rogue DHCP server) appears. Ctrl+C to stop.\n",
+		a.style.Green("stik daemon"), a.style.Cyan(cap.Interface()), a.style.Bold(notifier.Describe()))
 
-	sc := scan.New(reg, time.Now)
-	sc.OnNew = func(d *model.Device) {
-		fmt.Fprintf(a.out, "%s new device: %s%s%s, first seen %s\n",
-			a.style.Yellow("⚠"), d.Display(), ipSuffix(d), hostSuffix(d), ui.ClockTime(d.FirstSeen))
-		go func() { _ = notify.Send("New device on your network", notifyBody(d)) }()
-		// Persist immediately so the appearance survives a crash. Safe: we're on
-		// the same goroutine that just mutated the registry.
+	// deliver pushes an event to every configured sink off the capture goroutine,
+	// logging any sink failures without ever blocking packet handling.
+	deliver := func(ev alert.Event) {
+		go func() {
+			for _, e := range notifier.Deliver(ev) {
+				fmt.Fprintln(a.err, "stik: alert "+e.Error())
+			}
+		}()
+	}
+	// persist writes the registry immediately so an appearance survives a crash.
+	// Safe: called on the same goroutine that just mutated the registry.
+	persist := func() {
 		if err := a.save(reg); err != nil {
 			fmt.Fprintln(a.err, "stik: "+err.Error())
 		}
+	}
+
+	sc := scan.New(reg, time.Now)
+	sc.OnNew = func(d *model.Device) {
+		fmt.Fprintf(a.out, "%s new device: %s%s%s%s, first seen %s\n",
+			a.style.Yellow("⚠"), d.Display(), ipSuffix(d), hostSuffix(d), privSuffix(d), ui.ClockTime(d.FirstSeen))
+		deliver(eventFor(alert.KindNewDevice, d, cap.Interface()))
+		persist()
+	}
+	sc.OnDHCPServer = func(d *model.Device) {
+		fmt.Fprintf(a.out, "%s possible rogue DHCP server: %s%s is handing out leases — expected only your router\n",
+			a.style.Red("⚠ ⚠"), d.Display(), ipSuffix(d))
+		deliver(eventFor(alert.KindRogueDHCP, d, cap.Interface()))
+		persist()
 	}
 
 	runErr := cap.Run(ctx, sc.Handle)
@@ -105,6 +130,36 @@ func (a *app) cmdDaemon() error {
 		runErr = saveErr
 	}
 	return runErr
+}
+
+// resolveNotifySpecs prefers explicit --notify flags, falling back to the
+// STIK_NOTIFY environment variable (comma-separated) for daemonized setups.
+func resolveNotifySpecs(flags []string) []string {
+	if len(flags) > 0 {
+		return flags
+	}
+	var specs []string
+	for _, s := range strings.Split(os.Getenv("STIK_NOTIFY"), ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			specs = append(specs, s)
+		}
+	}
+	return specs
+}
+
+// eventFor snapshots a device into a transport-agnostic alert event.
+func eventFor(kind alert.Kind, d *model.Device, iface string) alert.Event {
+	return alert.Event{
+		Kind:      kind,
+		MAC:       d.MAC,
+		IP:        d.IP,
+		Name:      d.Display(),
+		Vendor:    d.Vendor,
+		Hostname:  d.Hostname,
+		Private:   d.Private,
+		FirstSeen: d.FirstSeen,
+		Interface: iface,
+	}
 }
 
 func (a *app) cmdName(rest []string) error {
@@ -256,16 +311,13 @@ func ipSuffix(d *model.Device) string {
 	return ""
 }
 
-func notifyBody(d *model.Device) string {
-	host := "no hostname"
-	if d.Hostname != "" {
-		host = d.Hostname
+// privSuffix flags a randomized (locally-administered) MAC in the daemon's
+// one-line log. The device may still be identifiable by an announced name.
+func privSuffix(d *model.Device) string {
+	if d.Private {
+		return " · randomized MAC"
 	}
-	ip := d.IP
-	if ip == "" {
-		ip = "no IP yet"
-	}
-	return fmt.Sprintf("%s · %s · %s · first seen %s", d.Display(), ip, host, ui.ClockTime(d.FirstSeen))
+	return ""
 }
 
 func pluralWord(n int) string {

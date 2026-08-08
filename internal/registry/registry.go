@@ -81,6 +81,9 @@ func (r *Registry) Observe(obs model.Observation, now time.Time) (*model.Device,
 	if obs.DHCPVendorClass != "" {
 		dev.DHCPVendorClass = obs.DHCPVendorClass
 	}
+	if obs.DHCPServer {
+		dev.DHCPServer = true
+	}
 
 	id := identify.Identify(identify.Input{
 		MAC:             dev.MAC,

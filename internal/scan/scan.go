@@ -22,6 +22,11 @@ type Scanner struct {
 	OnNew func(*model.Device)
 	// OnSeen fires for every observation of an already-known MAC.
 	OnSeen func(*model.Device)
+	// OnDHCPServer fires once when a device that is NOT in the trusted baseline
+	// is first seen handing out DHCP leases — the rogue-DHCP signal. It takes
+	// precedence over OnNew for that packet: a rogue DHCP server is a scarier
+	// event than a plain new device, and we don't want to alert twice.
+	OnDHCPServer func(*model.Device)
 }
 
 // New builds a Scanner over reg. If now is nil, time.Now is used.
@@ -39,8 +44,22 @@ func (s *Scanner) Handle(data []byte) {
 	if !ok {
 		return
 	}
+	// Capture whether we already knew this MAC as a DHCP server, before Observe
+	// mutates the record, so we can fire the rogue alert only on the transition.
+	var wasServer bool
+	if obs.DHCPServer {
+		if prev, ok := s.reg.Get(obs.MAC); ok {
+			wasServer = prev.DHCPServer
+		}
+	}
 	dev, isNew := s.reg.Observe(obs, s.now())
 	if dev == nil {
+		return
+	}
+	if obs.DHCPServer && !wasServer && !dev.Known {
+		if s.OnDHCPServer != nil {
+			s.OnDHCPServer(dev)
+		}
 		return
 	}
 	if isNew {

@@ -93,6 +93,35 @@ func TestDHCPFingerprintPreservesOrder(t *testing.T) {
 	}
 }
 
+func TestDHCPClientMessageIsNotAServer(t *testing.T) {
+	// A DISCOVER must never be mistaken for a server handing out leases.
+	obs, ok := Frame(dhcpFrame("da:a1:19:00:00:04", "", []byte{1, 3, 6, 15}, ""))
+	if !ok {
+		t.Fatal("expected dissection")
+	}
+	if obs.DHCPServer {
+		t.Error("client DISCOVER wrongly flagged as a DHCP server")
+	}
+}
+
+func TestDHCPServerOfferDetected(t *testing.T) {
+	// An OFFER identifies the server by frame source, not by chaddr (which holds
+	// the client's MAC). The server identifier (option 54) is its IP.
+	obs, ok := Frame(dhcpServerFrame("aa:bb:cc:00:00:01", "192.168.1.1", "da:a1:19:00:00:05"))
+	if !ok {
+		t.Fatal("expected DHCP offer to be dissected")
+	}
+	if !obs.DHCPServer {
+		t.Error("DHCP offer not flagged as a server")
+	}
+	if obs.MAC != "aa:bb:cc:00:00:01" {
+		t.Errorf("MAC = %q, want the server's frame-source MAC, not the client's chaddr", obs.MAC)
+	}
+	if obs.IP != "192.168.1.1" {
+		t.Errorf("IP = %q, want the option-54 server identifier 192.168.1.1", obs.IP)
+	}
+}
+
 func TestBroadcastMACIgnored(t *testing.T) {
 	// A frame whose ARP sender is the broadcast address yields no device.
 	if _, ok := Frame(arpFrame("ff:ff:ff:ff:ff:ff", "0.0.0.0")); ok {

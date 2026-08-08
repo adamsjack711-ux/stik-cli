@@ -87,6 +87,42 @@ stik daemon
 
 Because nobody watches a TUI all day. The alert comes to you.
 
+### Where the alert goes
+
+By default the daemon fires a native desktop notification. But a passive watcher's
+natural home is a headless box — a Pi, a homelab server — where there's no desktop
+to notify. So `stik daemon` can push the alert to you instead, with `--notify`
+(repeatable) or the `STIK_NOTIFY` environment variable:
+
+```bash
+stik daemon --notify desktop                       # the default
+stik daemon --notify ntfy://ntfy.sh/my-home-alerts # ntfy topic (phone push)
+stik daemon --notify https://hooks.example.com/xyz # webhook: the event as JSON
+stik daemon --notify desktop --notify ntfy://my-home-alerts   # both at once
+
+STIK_NOTIFY="ntfy://my-home-alerts,https://hooks.example.com/xyz" stik daemon
+```
+
+Webhook payloads are a small JSON object, ready to route anywhere:
+
+```json
+{
+  "event": "new_device",
+  "mac": "a4:83:e7:9f:2c:10",
+  "ip": "192.168.1.42",
+  "name": "Apple iPhone",
+  "vendor": "Apple, Inc.",
+  "private": false,
+  "first_seen": "2026-08-08T15:02:00Z",
+  "interface": "en0"
+}
+```
+
+The daemon also watches for a **rogue DHCP server** — a host handing out leases
+that isn't your trusted router. A home network has exactly one DHCP server; a
+second one (`"event": "rogue_dhcp"`) is the tell of a misconfigured device or an
+attacker, and gets an urgent alert.
+
 ---
 
 ## Commands
@@ -96,7 +132,7 @@ Because nobody watches a TUI all day. The alert comes to you.
 | `stik` | Status: is anything new? (runs the setup wizard on first use) |
 | `stik devices` | List every device in plain terms (`--verbose` for MACs & details) |
 | `stik watch` | Live view; new devices highlight as they appear |
-| `stik daemon` | Background watcher; fires a desktop notification on a new device |
+| `stik daemon` | Background watcher; alerts on a new device or rogue DHCP server (`--notify` for desktop / ntfy / webhook) |
 | `stik name <who>` | Name a device — match by name, hostname, IP, or MAC |
 | `stik forget <who>` | Remove a device from the registry |
 

@@ -43,7 +43,7 @@ func Frame(data []byte) (obs model.Observation, ok bool) {
 	case udp.DstPort == 5353 || udp.SrcPort == 5353:
 		return fromMDNS(udp.Payload, srcMAC, srcIP)
 	case udp.DstPort == 67 || udp.DstPort == 68 || udp.SrcPort == 67 || udp.SrcPort == 68:
-		return fromDHCP(udp.Payload, srcMAC)
+		return fromDHCP(udp.Payload, srcMAC, srcIP)
 	}
 	return model.Observation{}, false
 }

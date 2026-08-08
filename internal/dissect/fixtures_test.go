@@ -123,3 +123,38 @@ func dhcpFrame(srcMAC, hostname string, paramList []byte, vendorClass string) []
 	}
 	return serialize(eth, ip, udp, dhcp)
 }
+
+// dhcpOfferFrame builds an Ethernet+IPv4+UDP(67→68)+DHCP Offer from a server.
+// Note the chaddr echoes the *client's* MAC, exactly as a real OFFER does — the
+// dissector must key the observation on the server (frame source), not chaddr.
+func dhcpServerFrame(serverMAC, serverIP, clientMAC string) []byte {
+	eth := &layers.Ethernet{
+		SrcMAC:       mac(serverMAC),
+		DstMAC:       mac("ff:ff:ff:ff:ff:ff"),
+		EthernetType: layers.EthernetTypeIPv4,
+	}
+	ip := &layers.IPv4{
+		Version:  4,
+		TTL:      64,
+		Protocol: layers.IPProtocolUDP,
+		SrcIP:    net.ParseIP(serverIP),
+		DstIP:    net.ParseIP("255.255.255.255"),
+	}
+	udp := &layers.UDP{SrcPort: 67, DstPort: 68}
+	udp.SetNetworkLayerForChecksum(ip)
+
+	opts := layers.DHCPOptions{
+		layers.NewDHCPOption(layers.DHCPOptMessageType, []byte{byte(layers.DHCPMsgTypeOffer)}),
+		layers.NewDHCPOption(layers.DHCPOptServerID, net.ParseIP(serverIP).To4()),
+	}
+	dhcp := &layers.DHCPv4{
+		Operation:    layers.DHCPOpReply,
+		HardwareType: layers.LinkTypeEthernet,
+		HardwareLen:  6,
+		Xid:          0x12345678,
+		YourClientIP: net.ParseIP("192.168.1.50").To4(),
+		ClientHWAddr: mac(clientMAC),
+		Options:      opts,
+	}
+	return serialize(eth, ip, udp, dhcp)
+}

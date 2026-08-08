@@ -7,6 +7,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 // version is overridable at build time with -ldflags "-X main.version=...".
@@ -19,16 +20,27 @@ func main() {
 func run(args []string) int {
 	verbose := false
 	var positional []string
-	for _, a := range args {
-		switch a {
-		case "--verbose", "-v":
+	var notifySpecs []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--verbose" || a == "-v":
 			verbose = true
-		case "--help", "-h", "help":
+		case a == "--help" || a == "-h" || a == "help":
 			fmt.Print(helpText)
 			return 0
-		case "--version", "-V", "version":
+		case a == "--version" || a == "-V" || a == "version":
 			fmt.Println("stik " + version)
 			return 0
+		case a == "--notify":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "stik: --notify needs a value (desktop, ntfy://…, or an http(s) URL)")
+				return 2
+			}
+			notifySpecs = append(notifySpecs, args[i+1])
+			i++
+		case strings.HasPrefix(a, "--notify="):
+			notifySpecs = append(notifySpecs, strings.TrimPrefix(a, "--notify="))
 		default:
 			positional = append(positional, a)
 		}
@@ -51,7 +63,7 @@ func run(args []string) int {
 	case "watch":
 		err = a.cmdWatch()
 	case "daemon":
-		err = a.cmdDaemon()
+		err = a.cmdDaemon(notifySpecs)
 	case "name":
 		err = a.cmdName(rest)
 	case "forget":
@@ -80,12 +92,17 @@ Usage:
   stik              status: is anything new? (runs the setup wizard on first use)
   stik devices      list every device in plain terms (--verbose for MACs & details)
   stik watch        live view; new devices highlight as they appear
-  stik daemon       background watcher; desktop-notifies on a new device
+  stik daemon       background watcher; alerts on a new device (and rogue DHCP)
   stik name <who>   name a device (by name, hostname, IP, or MAC)
   stik forget <who> remove a device from the registry
 
 Flags:
   --verbose, -v     show MAC addresses and raw details
+  --notify <target> where daemon alerts go (repeatable). Targets:
+                      desktop                 native desktop notification (default)
+                      ntfy://[server/]topic   push to an ntfy topic
+                      https://…               POST the event as JSON to a webhook
+                    Or set STIK_NOTIFY=target1,target2 in the environment.
   --help, -h        this help
   --version, -V     version
 

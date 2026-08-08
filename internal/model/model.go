@@ -23,6 +23,7 @@ type Observation struct {
 	Hostname        string // "" unless mDNS/DHCP announced a name
 	DHCPFingerprint string // DHCP requested-option codes in order, "" if none
 	DHCPVendorClass string // DHCP option 60, e.g. "android-dhcp-14"; "" if none
+	DHCPServer      bool   // this packet was a DHCP OFFER/ACK — MAC is a server handing out leases
 	Source          Source
 }
 
@@ -44,8 +45,9 @@ type Device struct {
 	IP              string    `json:"ip,omitempty"`
 	DHCPFingerprint string    `json:"dhcp_fingerprint,omitempty"`
 	DHCPVendorClass string    `json:"dhcp_vendor_class,omitempty"`
-	Private         bool      `json:"private,omitempty"` // randomized MAC
-	Known           bool      `json:"known"`             // reviewed & accepted into the baseline
+	Private         bool      `json:"private,omitempty"`     // randomized MAC
+	DHCPServer      bool      `json:"dhcp_server,omitempty"` // seen handing out DHCP leases
+	Known           bool      `json:"known"`                 // reviewed & accepted into the baseline
 	FirstSeen       time.Time `json:"first_seen"`
 	LastSeen        time.Time `json:"last_seen"`
 }
