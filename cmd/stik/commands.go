@@ -90,8 +90,8 @@ func (a *app) cmdDaemon() error {
 
 	sc := scan.New(reg, time.Now)
 	sc.OnNew = func(d *model.Device) {
-		fmt.Fprintf(a.out, "%s new device: %s%s, first seen %s\n",
-			a.style.Yellow("⚠"), d.Display(), hostSuffix(d), ui.ClockTime(d.FirstSeen))
+		fmt.Fprintf(a.out, "%s new device: %s%s%s, first seen %s\n",
+			a.style.Yellow("⚠"), d.Display(), ipSuffix(d), hostSuffix(d), ui.ClockTime(d.FirstSeen))
 		go func() { _ = notify.Send("New device on your network", notifyBody(d)) }()
 		// Persist immediately so the appearance survives a crash. Safe: we're on
 		// the same goroutine that just mutated the registry.
@@ -247,12 +247,25 @@ func hostSuffix(d *model.Device) string {
 	return ""
 }
 
+// ipSuffix renders the device's IP for the one-line daemon log, e.g. " at
+// 192.168.1.42". Empty when the device hasn't revealed an address yet.
+func ipSuffix(d *model.Device) string {
+	if d.IP != "" {
+		return " at " + d.IP
+	}
+	return ""
+}
+
 func notifyBody(d *model.Device) string {
 	host := "no hostname"
 	if d.Hostname != "" {
 		host = d.Hostname
 	}
-	return fmt.Sprintf("%s · %s · first seen %s", d.Display(), host, ui.ClockTime(d.FirstSeen))
+	ip := d.IP
+	if ip == "" {
+		ip = "no IP yet"
+	}
+	return fmt.Sprintf("%s · %s · %s · first seen %s", d.Display(), ip, host, ui.ClockTime(d.FirstSeen))
 }
 
 func pluralWord(n int) string {
