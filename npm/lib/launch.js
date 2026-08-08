@@ -18,7 +18,10 @@ function isExecutable(p) {
 }
 
 function launch(name) {
-  const override = process.env[`${name.toUpperCase()}_BIN`];
+  // Env override key must be shell-safe: uppercase, non-alphanumerics to '_'
+  // (so `stik-net` -> STIK_NET_BIN, not the unusable STIK-NET_BIN).
+  const envKey = name.toUpperCase().replace(/[^A-Z0-9]/g, '_') + '_BIN';
+  const override = process.env[envKey];
   const bundled = path.join(
     __dirname,
     '..',
@@ -34,16 +37,16 @@ function launch(name) {
       `${name}: no prebuilt binary for ${process.platform}-${process.arch}.`
     );
     console.error(
-      'stik ships macOS arm64 and Linux x64/arm64 binaries. On other platforms,'
+      'stik-net ships macOS arm64 and Linux x64/arm64 binaries. On other platforms,'
     );
     console.error(
       'build from source (needs Go 1.26+ and libpcap):'
     );
     console.error(
-      '  go install github.com/adamsjack711-ux/stik-cli/cmd/stik@latest'
+      '  go install github.com/adamsjack711-ux/stik-cli/cmd/stik-net@latest'
     );
     console.error(
-      `then point ${name.toUpperCase()}_BIN at the resulting binary.`
+      `then point ${envKey} at the resulting binary.`
     );
     process.exit(1);
   }

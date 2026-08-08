@@ -19,11 +19,11 @@ Type "clear" Enter
 Show
 
 # The everyday check: is anything new? Usually, no — and that's the point.
-Type "stik" Sleep 600ms Enter
+Type "stik-net" Sleep 600ms Enter
 Sleep 2.5s
 
 # Who's on the network, in plain terms.
-Type "stik devices" Sleep 600ms Enter
+Type "stik-net devices" Sleep 600ms Enter
 Sleep 3s
 
 Type "clear" Enter
@@ -34,13 +34,13 @@ Type "bash demo/join.sh" Sleep 400ms Enter
 Sleep 1.5s
 
 # The money shot: stik noticed, and tells you in one line.
-Type "stik" Sleep 600ms Enter
+Type "stik-net" Sleep 600ms Enter
 Sleep 3.5s
 
 # It's just the new smart speaker. Give it a name.
-Type 'stik name amazon "kitchen echo"' Sleep 600ms Enter
+Type 'stik-net name amazon "kitchen echo"' Sleep 600ms Enter
 Sleep 2s
 
 # Back to boring. Boring is the feature.
-Type "stik" Sleep 600ms Enter
+Type "stik-net" Sleep 600ms Enter
 Sleep 3s

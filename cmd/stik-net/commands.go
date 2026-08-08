@@ -20,7 +20,7 @@ import (
 	"github.com/adamsjack711-ux/stik-cli/internal/ui"
 )
 
-// cmdStatus is the default `stik`: on first run it onboards; after that it's the
+// cmdStatus is the default `stik-net`: on first run it onboards; after that it's the
 // one-line, usually-boring verdict.
 func (a *app) cmdStatus() error {
 	reg, firstRun, err := a.load()
@@ -40,7 +40,7 @@ func (a *app) cmdDevices(verbose bool) error {
 		return err
 	}
 	if firstRun {
-		fmt.Fprintln(a.out, a.style.Dim("No baseline yet.")+" Run "+a.style.Bold("stik")+" to set one up.")
+		fmt.Fprintln(a.out, a.style.Dim("No baseline yet.")+" Run "+a.style.Bold("stik-net")+" to set one up.")
 		return nil
 	}
 	ui.DeviceList(a.out, a.style, reg.Devices(), verbose, time.Now())
@@ -74,7 +74,7 @@ func (a *app) cmdDaemon(notifySpecs []string) error {
 		return err
 	}
 	if firstRun {
-		return errors.New("no baseline yet — run `stik` once to set one up before starting the daemon")
+		return errors.New("no baseline yet — run `stik-net` once to set one up before starting the daemon")
 	}
 
 	notifier, err := alert.Sinks(resolveNotifySpecs(notifySpecs))
@@ -92,14 +92,14 @@ func (a *app) cmdDaemon(notifySpecs []string) error {
 	defer cancel()
 
 	fmt.Fprintf(a.out, "%s watching %s — alerts via %s when a new device (or a rogue DHCP server) appears. Ctrl+C to stop.\n",
-		a.style.Green("stik daemon"), a.style.Cyan(cap.Interface()), a.style.Bold(notifier.Describe()))
+		a.style.Green("stik-net daemon"), a.style.Cyan(cap.Interface()), a.style.Bold(notifier.Describe()))
 
 	// deliver pushes an event to every configured sink off the capture goroutine,
 	// logging any sink failures without ever blocking packet handling.
 	deliver := func(ev alert.Event) {
 		go func() {
 			for _, e := range notifier.Deliver(ev) {
-				fmt.Fprintln(a.err, "stik: alert "+e.Error())
+				fmt.Fprintln(a.err, "stik-net: alert "+e.Error())
 			}
 		}()
 	}
@@ -107,7 +107,7 @@ func (a *app) cmdDaemon(notifySpecs []string) error {
 	// Safe: called on the same goroutine that just mutated the registry.
 	persist := func() {
 		if err := a.save(reg); err != nil {
-			fmt.Fprintln(a.err, "stik: "+err.Error())
+			fmt.Fprintln(a.err, "stik-net: "+err.Error())
 		}
 	}
 
@@ -164,14 +164,14 @@ func eventFor(kind alert.Kind, d *model.Device, iface string) alert.Event {
 
 func (a *app) cmdName(rest []string) error {
 	if len(rest) == 0 {
-		return errors.New("usage: stik name <device> [new name]")
+		return errors.New("usage: stik-net name <device> [new name]")
 	}
 	reg, firstRun, err := a.load()
 	if err != nil {
 		return err
 	}
 	if firstRun {
-		return errors.New("no devices yet — run `stik` first")
+		return errors.New("no devices yet — run `stik-net` first")
 	}
 
 	dev, err := a.resolve(reg, rest[0])
@@ -196,7 +196,7 @@ func (a *app) cmdName(rest []string) error {
 
 func (a *app) cmdForget(rest []string) error {
 	if len(rest) == 0 {
-		return errors.New("usage: stik forget <device>")
+		return errors.New("usage: stik-net forget <device>")
 	}
 	reg, firstRun, err := a.load()
 	if err != nil {
@@ -221,8 +221,8 @@ func (a *app) cmdForget(rest []string) error {
 
 // onboard runs the first-use flow: a passive sweep, then the naming wizard.
 func (a *app) onboard(reg *registry.Registry) error {
-	fmt.Fprintf(a.out, "%s  Welcome to stik. Let's learn what's on your network.\n", a.style.Bold("👋"))
-	fmt.Fprintf(a.out, "%s\n", a.style.Dim(fmt.Sprintf("Listening passively for %ds — stik only ever listens, it never sends traffic.", int(scanSeconds().Seconds()))))
+	fmt.Fprintf(a.out, "%s  Welcome to stik-net. Let's learn what's on your network.\n", a.style.Bold("👋"))
+	fmt.Fprintf(a.out, "%s\n", a.style.Dim(fmt.Sprintf("Listening passively for %ds — stik-net only ever listens, it never sends traffic.", int(scanSeconds().Seconds()))))
 
 	if err := a.sweepWithSpinner(reg, scanSeconds()); err != nil {
 		return err
@@ -231,7 +231,7 @@ func (a *app) onboard(reg *registry.Registry) error {
 	devices := reg.SortedByLastSeen()
 	if len(devices) == 0 {
 		fmt.Fprintln(a.out, a.style.Dim("Didn't hear from any devices yet — your network may just be quiet."))
-		fmt.Fprintln(a.out, "Try "+a.style.Bold("stik watch")+" and leave it running for a bit.")
+		fmt.Fprintln(a.out, "Try "+a.style.Bold("stik-net watch")+" and leave it running for a bit.")
 		return a.save(reg) // write an empty baseline so we don't re-onboard every run
 	}
 	ui.RunWizard(os.Stdin, a.out, a.style, reg, devices)
@@ -272,7 +272,7 @@ func (a *app) resolve(reg *registry.Registry, query string) (*model.Device, erro
 	matches := reg.Find(query)
 	switch len(matches) {
 	case 0:
-		return nil, fmt.Errorf("no device matches %q — see `stik devices`", query)
+		return nil, fmt.Errorf("no device matches %q — see `stik-net devices`", query)
 	case 1:
 		return matches[0], nil
 	default:

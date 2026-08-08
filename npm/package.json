@@ -25,7 +25,7 @@
     "url": "https://github.com/adamsjack711-ux/stik-cli/issues"
   },
   "bin": {
-    "stik": "bin/stik.js"
+    "stik-net": "bin/stik-net.js"
   },
   "files": [
     "bin",

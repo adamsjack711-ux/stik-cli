@@ -25,7 +25,7 @@ type app struct {
 
 func newApp() *app {
 	st := store.New(store.DefaultPath())
-	st.Warn = func(msg string) { fmt.Fprintln(os.Stderr, "stik: "+msg) }
+	st.Warn = func(msg string) { fmt.Fprintln(os.Stderr, "stik-net: "+msg) }
 	return &app{
 		store: st,
 		out:   os.Stdout,
@@ -84,14 +84,14 @@ func scanSeconds() time.Duration {
 func friendlyError(s ui.Style, err error) (string, bool) {
 	var perm *capture.PermissionError
 	if errors.As(err, &perm) {
-		return s.Yellow("stik needs permission to watch network traffic.") + "\n" +
+		return s.Yellow("stik-net needs permission to watch network traffic.") + "\n" +
 			"Packet capture requires elevated privileges. Try:\n\n" +
-			"    " + s.Bold("sudo stik "+currentCommand()) + "\n\n" +
-			s.Dim("stik only listens — it never sends traffic — but the OS still gates raw capture behind root."), true
+			"    " + s.Bold("sudo stik-net "+currentCommand()) + "\n\n" +
+			s.Dim("stik-net only listens — it never sends traffic — but the OS still gates raw capture behind root."), true
 	}
 	var noif capture.NoInterfaceError
 	if errors.As(err, &noif) {
-		return s.Yellow("stik couldn't find an active network connection.") + "\n" +
+		return s.Yellow("stik-net couldn't find an active network connection.") + "\n" +
 			"Connect to Wi-Fi or Ethernet and try again.", true
 	}
 	return "", false

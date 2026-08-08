@@ -110,7 +110,7 @@ func (m *watchModel) View() string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "%s  %s  ·  watching %s  ·  %s\n",
-		s.Bold("stik"), s.Dim("passive network watch"), s.Cyan(m.iface), s.Dim(ClockTime(m.now)))
+		s.Bold("stik-net"), s.Dim("passive network watch"), s.Cyan(m.iface), s.Dim(ClockTime(m.now)))
 	fmt.Fprintln(&b, s.Dim(strings.Repeat("─", 48)))
 
 	devices := m.reg.SortedByLastSeen()

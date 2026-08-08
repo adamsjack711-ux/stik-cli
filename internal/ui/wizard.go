@@ -70,7 +70,7 @@ func RunWizard(in io.Reader, out io.Writer, s Style, reg *registry.Registry, dev
 
 	fmt.Fprintf(out, "%s Baseline set: %d named, %d acknowledged, %d skipped.\n",
 		s.Green("✓"), res.Named, res.Acked, res.Deferred)
-	fmt.Fprintf(out, "From now on, %s tells you when something new shows up.\n", s.Bold("stik"))
+	fmt.Fprintf(out, "From now on, %s tells you when something new shows up.\n", s.Bold("stik-net"))
 	return res
 }
 

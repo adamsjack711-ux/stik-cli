@@ -10,13 +10,13 @@ import (
 	"github.com/adamsjack711-ux/stik-cli/internal/model"
 )
 
-// Status prints the one-line (usually boring) verdict for `stik`. Boring is the
+// Status prints the one-line (usually boring) verdict for `stik-net`. Boring is the
 // feature: if nothing new has appeared, the user learns that in one glance.
 func Status(w io.Writer, s Style, devices []*model.Device, now time.Time) {
 	known, unknown := partition(devices)
 
 	if len(devices) == 0 {
-		fmt.Fprintln(w, s.Dim("No devices recorded yet.")+" Run "+s.Bold("stik watch")+" to take a look at your network.")
+		fmt.Fprintln(w, s.Dim("No devices recorded yet.")+" Run "+s.Bold("stik-net watch")+" to take a look at your network.")
 		return
 	}
 
@@ -43,14 +43,14 @@ func Status(w io.Writer, s Style, devices []*model.Device, now time.Time) {
 	if newest.Label != "" && newest.Name == "" {
 		fmt.Fprintf(w, "  %s\n", s.Dim(reasonFor(newest)))
 	}
-	fmt.Fprintf(w, "  Run %s to see it, or %s to label it.\n", s.Bold("stik devices"), s.Bold("stik name"))
+	fmt.Fprintf(w, "  Run %s to see it, or %s to label it.\n", s.Bold("stik-net devices"), s.Bold("stik-net name"))
 }
 
 // DeviceList prints every device in human terms. Names come first; the MAC and
 // other raw details only appear under --verbose.
 func DeviceList(w io.Writer, s Style, devices []*model.Device, verbose bool, now time.Time) {
 	if len(devices) == 0 {
-		fmt.Fprintln(w, s.Dim("No devices recorded yet.")+" Run "+s.Bold("stik watch")+" first.")
+		fmt.Fprintln(w, s.Dim("No devices recorded yet.")+" Run "+s.Bold("stik-net watch")+" first.")
 		return
 	}
 	known, unknown := partition(devices)

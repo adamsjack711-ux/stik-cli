@@ -19,21 +19,21 @@ Every other tool in this space — Wireshark, nmap, tcpdump — hands you **evid
 ⚠ A new device joined 2 minutes ago.
   Amazon device, first seen 17:34.
   Its network-card maker is Amazon; it hasn't announced a name.
-  Run `stik devices` to see it, or `stik name` to label it.
+  Run `stik-net devices` to see it, or `stik-net name` to label it.
 ```
 
 ---
 
 ## Install
 
-stik is a single Go binary. It uses `libpcap` for capture (bundled on macOS; `libpcap0.8` ships on most Linux desktops).
+stik-net is a single Go binary. It uses `libpcap` for capture (bundled on macOS; `libpcap0.8` ships on most Linux desktops). The npm package is `stik-cli`; the installed command is **`stik-net`** (the bare `stik` name belongs to an unrelated tool).
 
 ```bash
 # npm (macOS arm64, Linux x64/arm64 — ships prebuilt binaries, no toolchain needed)
-npm install -g stik-cli
+npm install -g stik-cli        # installs the `stik-net` command
 
-# from source (needs Go 1.26+ and libpcap headers) — installs a binary named `stik`
-go install github.com/adamsjack711-ux/stik-cli/cmd/stik@latest
+# from source (needs Go 1.26+ and libpcap headers) — installs a binary named `stik-net`
+go install github.com/adamsjack711-ux/stik-cli/cmd/stik-net@latest
 
 # or clone + make
 git clone https://github.com/adamsjack711-ux/stik-cli
@@ -42,7 +42,7 @@ cd stik-cli && make install   # builds and installs to /usr/local/bin
 
 On Debian/Ubuntu, building from source needs the pcap headers: `sudo apt install libpcap-dev`. The prebuilt Linux binaries link `libpcap` dynamically, so a runtime host needs the shared library — `sudo apt install libpcap0.8` (already present on most desktops).
 
-Packet capture requires elevated privileges. On macOS you can grant your user access to the BPF devices once (Wireshark's *ChmodBPF* helper does this) instead of running as root; otherwise run stik with `sudo`.
+Packet capture requires elevated privileges. On macOS you can grant your user access to the BPF devices once (Wireshark's *ChmodBPF* helper does this) instead of running as root; otherwise run stik-net with `sudo`.
 
 ---
 
@@ -51,10 +51,10 @@ Packet capture requires elevated privileges. On macOS you can grant your user ac
 **First run walks you through your network, one device at a time.** This is the whole idea: it builds the baseline of "normal", and it gets you to actually *look* at what's connected — usually for the first time.
 
 ```
-$ stik
+$ stik-net
 
-👋  Welcome to stik. Let's learn what's on your network.
-Listening passively for 10s — stik only ever listens, it never sends traffic.
+👋  Welcome to stik-net. Let's learn what's on your network.
+Listening passively for 10s — stik-net only ever listens, it never sends traffic.
 
 Found 8 devices on your network. Let's figure out what they are.
 
@@ -72,17 +72,17 @@ Found 8 devices on your network. Let's figure out what they are.
   ...
 ```
 
-After that, `stik` is a one-line glance — and usually boring. **Boring is the feature.**
+After that, `stik-net` is a one-line glance — and usually boring. **Boring is the feature.**
 
 ```
-$ stik
+$ stik-net
 ✓ Everything looks normal. 8 known devices.
 ```
 
 Leave the watcher running in the background, and you get a **desktop notification** the moment something unrecognized joins:
 
 ```bash
-stik daemon
+stik-net daemon
 ```
 
 Because nobody watches a TUI all day. The alert comes to you.
@@ -91,16 +91,16 @@ Because nobody watches a TUI all day. The alert comes to you.
 
 By default the daemon fires a native desktop notification. But a passive watcher's
 natural home is a headless box — a Pi, a homelab server — where there's no desktop
-to notify. So `stik daemon` can push the alert to you instead, with `--notify`
+to notify. So `stik-net daemon` can push the alert to you instead, with `--notify`
 (repeatable) or the `STIK_NOTIFY` environment variable:
 
 ```bash
-stik daemon --notify desktop                       # the default
-stik daemon --notify ntfy://ntfy.sh/my-home-alerts # ntfy topic (phone push)
-stik daemon --notify https://hooks.example.com/xyz # webhook: the event as JSON
-stik daemon --notify desktop --notify ntfy://my-home-alerts   # both at once
+stik-net daemon --notify desktop                       # the default
+stik-net daemon --notify ntfy://ntfy.sh/my-home-alerts # ntfy topic (phone push)
+stik-net daemon --notify https://hooks.example.com/xyz # webhook: the event as JSON
+stik-net daemon --notify desktop --notify ntfy://my-home-alerts   # both at once
 
-STIK_NOTIFY="ntfy://my-home-alerts,https://hooks.example.com/xyz" stik daemon
+STIK_NOTIFY="ntfy://my-home-alerts,https://hooks.example.com/xyz" stik-net daemon
 ```
 
 Webhook payloads are a small JSON object, ready to route anywhere:
@@ -129,15 +129,15 @@ attacker, and gets an urgent alert.
 
 | Command | What it does |
 |---|---|
-| `stik` | Status: is anything new? (runs the setup wizard on first use) |
-| `stik devices` | List every device in plain terms (`--verbose` for MACs & details) |
-| `stik watch` | Live view; new devices highlight as they appear |
-| `stik daemon` | Background watcher; alerts on a new device or rogue DHCP server (`--notify` for desktop / ntfy / webhook) |
-| `stik name <who>` | Name a device — match by name, hostname, IP, or MAC |
-| `stik forget <who>` | Remove a device from the registry |
+| `stik-net` | Status: is anything new? (runs the setup wizard on first use) |
+| `stik-net devices` | List every device in plain terms (`--verbose` for MACs & details) |
+| `stik-net watch` | Live view; new devices highlight as they appear |
+| `stik-net daemon` | Background watcher; alerts on a new device or rogue DHCP server (`--notify` for desktop / ntfy / webhook) |
+| `stik-net name <who>` | Name a device — match by name, hostname, IP, or MAC |
+| `stik-net forget <who>` | Remove a device from the registry |
 
 ```
-$ stik devices
+$ stik-net devices
 Known (4)
   • my phone (Apple iPhone)
       last seen 2 minutes ago · dylans-iphone

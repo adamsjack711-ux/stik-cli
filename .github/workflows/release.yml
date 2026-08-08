@@ -46,7 +46,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: stik-${{ matrix.platform }}
-          path: npm/dist/${{ matrix.platform }}/stik
+          path: npm/dist/${{ matrix.platform }}/stik-net
           if-no-files-found: error
 
   publish:
@@ -75,8 +75,8 @@ jobs:
           for d in artifacts/stik-*; do
             plat="${d#artifacts/stik-}"
             mkdir -p "npm/dist/$plat"
-            cp "$d/stik" "npm/dist/$plat/stik"
-            chmod +x "npm/dist/$plat/stik"
+            cp "$d/stik-net" "npm/dist/$plat/stik-net"
+            chmod +x "npm/dist/$plat/stik-net"
           done
           cp LICENSE npm/LICENSE
           sed 's#demo/stik.gif#https://raw.githubusercontent.com/adamsjack711-ux/stik-cli/main/demo/stik.gif#g' \

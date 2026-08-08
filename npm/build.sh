@@ -22,9 +22,9 @@ esac
 DIST="dist/${GOOS}-${NODE_ARCH}"
 
 mkdir -p "$DIST"
-echo "building stik $VERSION for ${GOOS}/${GOARCH} -> ${DIST}…"
+echo "building stik-net $VERSION for ${GOOS}/${GOARCH} -> ${DIST}…"
 CGO_ENABLED=1 \
-  go build -ldflags "-s -w -X main.version=$VERSION" -o "$DIST/stik" ../cmd/stik
+  go build -ldflags "-s -w -X main.version=$VERSION" -o "$DIST/stik-net" ../cmd/stik-net
 
 cp ../LICENSE .
 
@@ -33,4 +33,4 @@ cp ../LICENSE .
 sed 's#demo/stik.gif#https://raw.githubusercontent.com/adamsjack711-ux/stik-cli/main/demo/stik.gif#g' \
   ../README.md > README.md
 
-echo "staged npm/ (${DIST}/stik, README.md, LICENSE)"
+echo "staged npm/ (${DIST}/stik-net, README.md, LICENSE)"
