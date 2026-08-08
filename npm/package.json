@@ -1,6 +1,6 @@
 {
   "name": "stik-cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Passive network watcher — tells you in plain English what's on your network, and taps you on the shoulder when something new shows up.",
   "keywords": [
     "network",
