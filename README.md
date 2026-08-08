@@ -29,7 +29,7 @@ Every other tool in this space — Wireshark, nmap, tcpdump — hands you **evid
 stik is a single Go binary. It uses `libpcap` for capture (bundled on macOS; `libpcap0.8` ships on most Linux desktops).
 
 ```bash
-# npm (macOS arm64 — ships a prebuilt binary, no toolchain needed)
+# npm (macOS arm64, Linux x64/arm64 — ships prebuilt binaries, no toolchain needed)
 npm install -g stik-cli
 
 # from source (needs Go 1.26+ and libpcap headers) — installs a binary named `stik`
@@ -40,7 +40,7 @@ git clone https://github.com/adamsjack711-ux/stik-cli
 cd stik-cli && make install   # builds and installs to /usr/local/bin
 ```
 
-On Debian/Ubuntu, building from source needs the pcap headers: `sudo apt install libpcap-dev`.
+On Debian/Ubuntu, building from source needs the pcap headers: `sudo apt install libpcap-dev`. The prebuilt Linux binaries link `libpcap` dynamically, so a runtime host needs the shared library — `sudo apt install libpcap0.8` (already present on most desktops).
 
 Packet capture requires elevated privileges. On macOS you can grant your user access to the BPF devices once (Wireshark's *ChmodBPF* helper does this) instead of running as root; otherwise run stik with `sudo`.
 

@@ -1,0 +1,91 @@
+name: Release
+
+# Tag a version to cut a release:
+#   git tag v0.2.2 && git push --tags
+# Each platform builds natively (cgo + libpcap can't cross-compile), then one
+# publish job assembles the binaries into the npm package and ships it.
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest      # Apple Silicon
+            platform: darwin-arm64
+          - runner: ubuntu-latest     # x64
+            platform: linux-x64
+          - runner: ubuntu-24.04-arm  # arm64
+            platform: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          check-latest: true
+
+      # gopacket links libpcap via cgo; preinstalled on the macOS runner.
+      - name: Install libpcap (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
+
+      - name: Set package version from tag
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          node -e "const f='npm/package.json',p=require('./'+f);p.version='$V';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
+
+      - name: Build binary
+        run: ./npm/build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stik-${{ matrix.platform }}
+          path: npm/dist/${{ matrix.platform }}/stik
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Set package version from tag
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          node -e "const f='npm/package.json',p=require('./'+f);p.version='$V';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
+
+      - name: Download platform binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Assemble npm/dist and metadata
+        run: |
+          for d in artifacts/stik-*; do
+            plat="${d#artifacts/stik-}"
+            mkdir -p "npm/dist/$plat"
+            cp "$d/stik" "npm/dist/$plat/stik"
+            chmod +x "npm/dist/$plat/stik"
+          done
+          cp LICENSE npm/LICENSE
+          sed 's#demo/stik.gif#https://raw.githubusercontent.com/adamsjack711-ux/stik-cli/main/demo/stik.gif#g' \
+            README.md > npm/README.md
+          echo "--- staged binaries ---"
+          ls -R npm/dist
+
+      - name: Publish to npm
+        working-directory: npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

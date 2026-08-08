@@ -34,10 +34,10 @@ function launch(name) {
       `${name}: no prebuilt binary for ${process.platform}-${process.arch}.`
     );
     console.error(
-      'stik currently ships a macOS arm64 binary. On other platforms, build from'
+      'stik ships macOS arm64 and Linux x64/arm64 binaries. On other platforms,'
     );
     console.error(
-      'source (needs Go 1.26+ and libpcap):'
+      'build from source (needs Go 1.26+ and libpcap):'
     );
     console.error(
       '  go install github.com/adamsjack711-ux/stik-cli/cmd/stik@latest'
