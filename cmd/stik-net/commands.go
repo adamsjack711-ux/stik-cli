@@ -5,8 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"os/user"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -17,6 +20,7 @@ import (
 	"github.com/adamsjack711-ux/stik-cli/internal/model"
 	"github.com/adamsjack711-ux/stik-cli/internal/registry"
 	"github.com/adamsjack711-ux/stik-cli/internal/scan"
+	"github.com/adamsjack711-ux/stik-cli/internal/service"
 	"github.com/adamsjack711-ux/stik-cli/internal/ui"
 )
 
@@ -180,6 +184,156 @@ func eventFor(kind alert.Kind, d *model.Device, iface string) alert.Event {
 		FirstSeen: d.FirstSeen,
 		Interface: iface,
 	}
+}
+
+// cmdService installs, removes, or reports the boot service.
+func (a *app) cmdService(rest, notifySpecs []string) error {
+	if len(rest) == 0 {
+		return errors.New("usage: stik-net service <install|uninstall|status>")
+	}
+	switch rest[0] {
+	case "install":
+		return a.serviceInstall(notifySpecs)
+	case "uninstall", "remove":
+		return a.serviceUninstall()
+	case "status":
+		return a.serviceStatus()
+	default:
+		return fmt.Errorf("unknown service command %q — want install, uninstall, or status", rest[0])
+	}
+}
+
+func (a *app) serviceInstall(notifySpecs []string) error {
+	if os.Geteuid() != 0 {
+		return errors.New("installing the boot service needs root — try: sudo stik-net service install")
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locating the stik-net binary: %w", err)
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+
+	// The service runs as root off its own copy of the baseline, so its writes
+	// never leave a root-owned file in the user's ~/.stik. Seed it from whatever
+	// the invoking user onboarded.
+	userBaseline := filepath.Join(userStikHome(), "devices.json")
+	if _, err := os.Stat(userBaseline); err != nil {
+		return fmt.Errorf("no baseline at %s yet — run `sudo stik-net` once to set one up before installing the service", userBaseline)
+	}
+	sysDir := service.SystemStoreDir()
+	if err := os.MkdirAll(sysDir, 0o755); err != nil {
+		return fmt.Errorf("creating %s: %w", sysDir, err)
+	}
+	if err := copyFile(userBaseline, filepath.Join(sysDir, "devices.json"), 0o600); err != nil {
+		return fmt.Errorf("seeding the service baseline: %w", err)
+	}
+
+	specs := resolveNotifySpecs(notifySpecs)
+	notifier, err := alert.Sinks(specs) // validate specs before baking them in
+	if err != nil {
+		return err
+	}
+	if onlyDesktop(specs) {
+		fmt.Fprintln(a.out, a.style.Yellow("Note:")+" a boot service runs in the background and can't reach the desktop notifier.")
+		fmt.Fprintln(a.out, "      Add a channel it can deliver to, e.g. "+a.style.Bold("--notify ntfy://ntfy.sh/your-topic")+".")
+	}
+
+	daemonArgs := []string{"daemon"}
+	for _, s := range specs {
+		daemonArgs = append(daemonArgs, "--notify", s)
+	}
+
+	path, err := service.Install(service.Config{
+		ExecPath:   exe,
+		DaemonArgs: daemonArgs,
+		Env:        map[string]string{"STIK_HOME": sysDir},
+	})
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(a.out, "%s installed and started the stik-net service — it now runs at boot.\n", a.style.Green("✓"))
+	fmt.Fprintf(a.out, "  binary:   %s\n", exe)
+	fmt.Fprintf(a.out, "  unit:     %s\n", path)
+	fmt.Fprintf(a.out, "  baseline: %s %s\n", filepath.Join(sysDir, "devices.json"), a.style.Dim("(a copy — re-run install to refresh it)"))
+	fmt.Fprintf(a.out, "  alerts:   %s\n", notifier.Describe())
+	fmt.Fprintf(a.out, "Check it with %s.\n", a.style.Bold("sudo stik-net service status"))
+	return nil
+}
+
+func (a *app) serviceUninstall() error {
+	if os.Geteuid() != 0 {
+		return errors.New("removing the boot service needs root — try: sudo stik-net service uninstall")
+	}
+	path, err := service.Uninstall()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(a.out, "%s removed the stik-net service (%s).\n", a.style.Green("✓"), path)
+	return nil
+}
+
+func (a *app) serviceStatus() error {
+	st, err := service.Status()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(a.out, "stik-net service: %s\n", st)
+	return nil
+}
+
+// userStikHome is the directory holding the invoking user's devices.json,
+// seeing through sudo (SUDO_USER) and honoring an explicit STIK_HOME.
+func userStikHome() string {
+	if h := os.Getenv("STIK_HOME"); h != "" {
+		return h
+	}
+	home := ""
+	if su := os.Getenv("SUDO_USER"); su != "" {
+		if u, err := user.Lookup(su); err == nil {
+			home = u.HomeDir
+		}
+	}
+	if home == "" {
+		if u, err := user.Current(); err == nil {
+			home = u.HomeDir
+		}
+	}
+	return filepath.Join(home, ".stik")
+}
+
+// onlyDesktop reports whether the notify specs resolve to desktop-only delivery
+// (including the empty default), which a background service can't reach.
+func onlyDesktop(specs []string) bool {
+	if len(specs) == 0 {
+		return true
+	}
+	for _, s := range specs {
+		if t := strings.TrimSpace(s); t != "" && t != "desktop" {
+			return false
+		}
+	}
+	return true
+}
+
+// copyFile copies src to dst with the given mode, truncating any existing file.
+func copyFile(src, dst string, mode os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 func (a *app) cmdName(rest []string) error {

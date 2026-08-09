@@ -64,6 +64,8 @@ func run(args []string) int {
 		err = a.cmdWatch()
 	case "daemon":
 		err = a.cmdDaemon(notifySpecs)
+	case "service":
+		err = a.cmdService(rest, notifySpecs)
 	case "name":
 		err = a.cmdName(rest)
 	case "forget":
@@ -93,6 +95,7 @@ Usage:
   stik-net devices      list every device in plain terms (--verbose for MACs & details)
   stik-net watch        live view; new devices highlight as they appear
   stik-net daemon       background watcher; alerts on a new device, rogue DHCP, or ARP spoofing
+  stik-net service ...  install/uninstall/status the boot service (needs sudo)
   stik-net name <who>   name a device (by name, hostname, IP, or MAC)
   stik-net forget <who> remove a device from the registry
 

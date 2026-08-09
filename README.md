@@ -118,6 +118,26 @@ Webhook payloads are a small JSON object, ready to route anywhere:
 }
 ```
 
+### Run it at boot
+
+To keep watching across reboots without re-launching by hand, install it as a
+service — a launchd LaunchDaemon on macOS, a systemd unit on Linux. Both run as
+root (packet capture needs it), so use `sudo`:
+
+```bash
+sudo stik-net                                              # onboard once, if you haven't
+sudo stik-net service install --notify ntfy://ntfy.sh/my-home-alerts
+sudo stik-net service status
+sudo stik-net service uninstall
+```
+
+Because a background service can't reach your desktop's notifier, point it at an
+`ntfy` or webhook target. The service runs off its own root-owned copy of your
+baseline (so it never leaves a root-owned file in `~/.stik`); re-run `install`
+to refresh that copy after you name new devices.
+
+### Two tampering signals
+
 The daemon also watches for two tampering signals, both urgent:
 
 - **Rogue DHCP server** (`"event": "rogue_dhcp"`) — a host handing out leases that
@@ -138,7 +158,8 @@ The daemon also watches for two tampering signals, both urgent:
 | `stik-net` | Status: is anything new? (runs the setup wizard on first use) |
 | `stik-net devices` | List every device in plain terms (`--verbose` for MACs & details) |
 | `stik-net watch` | Live view; new devices highlight as they appear |
-| `stik-net daemon` | Background watcher; alerts on a new device or rogue DHCP server (`--notify` for desktop / ntfy / webhook) |
+| `stik-net daemon` | Background watcher; alerts on a new device, rogue DHCP, or ARP spoofing (`--notify` for desktop / ntfy / webhook) |
+| `stik-net service <cmd>` | `install` / `uninstall` / `status` the boot service (needs `sudo`) |
 | `stik-net name <who>` | Name a device — match by name, hostname, IP, or MAC |
 | `stik-net forget <who>` | Remove a device from the registry |
 
