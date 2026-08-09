@@ -91,7 +91,7 @@ func (a *app) cmdDaemon(notifySpecs []string) error {
 	ctx, cancel := signalContext()
 	defer cancel()
 
-	fmt.Fprintf(a.out, "%s watching %s — alerts via %s when a new device (or a rogue DHCP server) appears. Ctrl+C to stop.\n",
+	fmt.Fprintf(a.out, "%s watching %s — alerts via %s on a new device, a rogue DHCP server, or ARP spoofing. Ctrl+C to stop.\n",
 		a.style.Green("stik-net daemon"), a.style.Cyan(cap.Interface()), a.style.Bold(notifier.Describe()))
 
 	// deliver pushes an event to every configured sink off the capture goroutine,
@@ -122,6 +122,26 @@ func (a *app) cmdDaemon(notifySpecs []string) error {
 		fmt.Fprintf(a.out, "%s possible rogue DHCP server: %s%s is handing out leases — expected only your router\n",
 			a.style.Red("⚠ ⚠"), d.Display(), ipSuffix(d))
 		deliver(eventFor(alert.KindRogueDHCP, d, cap.Interface()))
+		persist()
+	}
+	sc.OnConflict = func(c scan.Conflict) {
+		was := c.OldMAC
+		if c.Old != nil {
+			was = c.Old.Display() + " (" + c.OldMAC + ")"
+		}
+		claimant := "an unknown device"
+		if c.New != nil {
+			claimant = c.New.Display()
+		}
+		fmt.Fprintf(a.out, "%s possible ARP spoofing: %s is now claimed by %s (%s) — was %s\n",
+			a.style.Red("⚠ ⚠"), c.IP, claimant, c.NewMAC, was)
+		ev := eventFor(alert.KindARPSpoof, c.New, cap.Interface())
+		ev.IP = c.IP // the contested address, not necessarily the device's own
+		ev.PrevMAC = c.OldMAC
+		if c.Old != nil {
+			ev.PrevName = c.Old.Display()
+		}
+		deliver(ev)
 		persist()
 	}
 

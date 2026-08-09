@@ -118,10 +118,16 @@ Webhook payloads are a small JSON object, ready to route anywhere:
 }
 ```
 
-The daemon also watches for a **rogue DHCP server** — a host handing out leases
-that isn't your trusted router. A home network has exactly one DHCP server; a
-second one (`"event": "rogue_dhcp"`) is the tell of a misconfigured device or an
-attacker, and gets an urgent alert.
+The daemon also watches for two tampering signals, both urgent:
+
+- **Rogue DHCP server** (`"event": "rogue_dhcp"`) — a host handing out leases that
+  isn't your trusted router. A home network has exactly one DHCP server; a second
+  is the tell of a misconfigured device or an attacker.
+- **ARP spoofing** (`"event": "arp_spoof"`) — an IP address suddenly claimed by a
+  different MAC while its previous owner is still active. That concurrent second
+  claimant is the classic man-in-the-middle move (e.g. impersonating your gateway
+  to intercept traffic). Slow, legitimate DHCP reassignment doesn't trip it —
+  only a live conflict does. Still passive: stik-net never sends a probe.
 
 ---
 

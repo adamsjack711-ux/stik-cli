@@ -92,7 +92,7 @@ Usage:
   stik-net              status: is anything new? (runs the setup wizard on first use)
   stik-net devices      list every device in plain terms (--verbose for MACs & details)
   stik-net watch        live view; new devices highlight as they appear
-  stik-net daemon       background watcher; alerts on a new device (and rogue DHCP)
+  stik-net daemon       background watcher; alerts on a new device, rogue DHCP, or ARP spoofing
   stik-net name <who>   name a device (by name, hostname, IP, or MAC)
   stik-net forget <who> remove a device from the registry
 

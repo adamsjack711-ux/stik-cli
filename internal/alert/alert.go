@@ -24,6 +24,7 @@ type Kind string
 const (
 	KindNewDevice Kind = "new_device"
 	KindRogueDHCP Kind = "rogue_dhcp"
+	KindARPSpoof  Kind = "arp_spoof"
 )
 
 // Event is a self-contained alert payload: JSON for a webhook, a title+body
@@ -39,19 +40,43 @@ type Event struct {
 	Private   bool      `json:"private,omitempty"` // randomized (locally-administered) MAC
 	FirstSeen time.Time `json:"first_seen"`
 	Interface string    `json:"interface,omitempty"`
+
+	// Set only for KindARPSpoof: the MAC/name that previously held Event.IP,
+	// which Event.MAC has now taken over.
+	PrevMAC  string `json:"prev_mac,omitempty"`
+	PrevName string `json:"prev_name,omitempty"`
 }
 
 // Title is the one-line headline. Kept ASCII so it's safe in an HTTP header
 // (ntfy carries the title that way).
 func (e Event) Title() string {
-	if e.Kind == KindRogueDHCP {
+	switch e.Kind {
+	case KindRogueDHCP:
 		return "Possible rogue DHCP server"
+	case KindARPSpoof:
+		return "Possible ARP spoofing"
+	default:
+		return "New device on your network"
 	}
-	return "New device on your network"
 }
 
 // Body is the human-readable detail line.
 func (e Event) Body() string {
+	if e.Kind == KindARPSpoof {
+		who := e.Name
+		if who == "" {
+			who = e.MAC
+		}
+		s := e.IP + " is now claimed by " + who + " (" + e.MAC + ")"
+		prev := e.PrevName
+		if prev == "" {
+			prev = e.PrevMAC
+		}
+		if prev != "" {
+			s += " · was " + prev
+		}
+		return s
+	}
 	parts := []string{e.Name}
 	if e.Name == "" {
 		parts[0] = e.MAC
@@ -225,7 +250,7 @@ func (n ntfySink) Deliver(e Event) error {
 		return err
 	}
 	req.Header.Set("Title", e.Title())
-	if e.Kind == KindRogueDHCP {
+	if e.Kind == KindRogueDHCP || e.Kind == KindARPSpoof {
 		req.Header.Set("Priority", "urgent")
 		req.Header.Set("Tags", "rotating_light")
 	} else {

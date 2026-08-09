@@ -127,6 +127,26 @@ func TestEventBodyMentionsRandomizedMAC(t *testing.T) {
 	}
 }
 
+func TestARPSpoofTitleAndBody(t *testing.T) {
+	e := Event{
+		Kind:     KindARPSpoof,
+		IP:       "192.168.1.1",
+		MAC:      "66:66:66:66:66:66",
+		Name:     "an unknown device",
+		PrevMAC:  "da:a1:19:00:00:01",
+		PrevName: "router",
+	}
+	if e.Title() != "Possible ARP spoofing" {
+		t.Errorf("arp-spoof title = %q", e.Title())
+	}
+	body := e.Body()
+	for _, want := range []string{"192.168.1.1", "an unknown device", "66:66:66:66:66:66", "was router"} {
+		if !contains(body, want) {
+			t.Errorf("Body() = %q, missing %q", body, want)
+		}
+	}
+}
+
 func TestRogueDHCPTitleAndBody(t *testing.T) {
 	e := sampleEvent()
 	e.Kind = KindRogueDHCP
