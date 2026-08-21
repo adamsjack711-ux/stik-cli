@@ -62,6 +62,10 @@ func run(args []string) int {
 		err = a.cmdDevices(verbose)
 	case "watch":
 		err = a.cmdWatch()
+	case "discover":
+		err = a.cmdDiscover(rest)
+	case "ports":
+		err = a.cmdPorts(rest)
 	case "daemon":
 		err = a.cmdDaemon(notifySpecs)
 	case "service":
@@ -94,6 +98,8 @@ Usage:
   stik-net              status: is anything new? (runs the setup wizard on first use)
   stik-net devices      list every device in plain terms (--verbose for MACs & details)
   stik-net watch        live view; new devices highlight as they appear
+  stik-net discover     active host sweep of an authorized scope (needs --scope)
+  stik-net ports [tgt]  connect-scan open ports and identify the services (needs --scope)
   stik-net daemon       background watcher; alerts on a new device, rogue DHCP, or ARP spoofing
   stik-net service ...  install/uninstall/status the boot service (needs sudo)
   stik-net name <who>   name a device (by name, hostname, IP, or MAC)
@@ -106,9 +112,12 @@ Flags:
                       ntfy://[server/]topic   push to an ntfy topic
                       https://…               POST the event as JSON to a webhook
                     Or set STIK_NOTIFY=target1,target2 in the environment.
+  --no-fingerprint  ports: list open ports only; don't identify the services
   --help, -h        this help
   --version, -V     version
 
-stik-net is passive (listen-only), sees broadcast/multicast traffic only, and is
-for networks you own. It never scans, probes, or transmits.
+The watcher (status, devices, watch, daemon) is passive: listen-only, broadcast/
+multicast traffic only, for networks you own. The active auditor (discover,
+ports) only runs against targets you list in an explicit --scope file, and
+probes nothing outside it.
 `
