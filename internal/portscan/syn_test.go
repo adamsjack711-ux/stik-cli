@@ -29,7 +29,7 @@ func decodeTCP(t *testing.T, raw []byte) *layers.TCP {
 
 func TestBuildSYNIsASingleSYNSegment(t *testing.T) {
 	src, dst := net.IPv4(192, 168, 1, 10), net.IPv4(192, 168, 1, 20)
-	raw, err := buildSYN(src, dst, 40000, 443)
+	raw, err := buildSYN(src, dst, 40000, 443, false)
 	if err != nil {
 		t.Fatalf("buildSYN: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestBuildSYNIsASingleSYNSegment(t *testing.T) {
 
 func TestBuildSYNChecksumCoversThisAddressPair(t *testing.T) {
 	src, dst := net.IPv4(10, 0, 0, 1), net.IPv4(10, 0, 0, 2)
-	raw, err := buildSYN(src, dst, 40000, 22)
+	raw, err := buildSYN(src, dst, 40000, 22, false)
 	if err != nil {
 		t.Fatalf("buildSYN: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestBuildSYNChecksumCoversThisAddressPair(t *testing.T) {
 	}
 	// The TCP checksum covers a pseudo-header of the addresses, so the same
 	// segment to a different host must checksum differently.
-	other, err := buildSYN(src, net.IPv4(10, 0, 0, 3), 40000, 22)
+	other, err := buildSYN(src, net.IPv4(10, 0, 0, 3), 40000, 22, false)
 	if err != nil {
 		t.Fatalf("buildSYN: %v", err)
 	}
@@ -96,10 +96,17 @@ func TestClassifyTCP(t *testing.T) {
 }
 
 func TestBPFFilterMatchesOnlyOurReplies(t *testing.T) {
-	got := bpfReplyFilter(net.IPv4(192, 168, 1, 20), 40000)
-	want := "tcp and src host 192.168.1.20 and dst port 40000"
+	got := bpfReplyFilter(net.IPv4(192, 168, 1, 20), 40000, false)
+	want := "ip and tcp and src host 192.168.1.20 and dst port 40000"
 	if got != want {
 		t.Errorf("filter = %q, want %q", got, want)
+	}
+	// The family is stated explicitly so a v4-mapped form of an address cannot
+	// slip through the v6 filter.
+	got6 := bpfReplyFilter(net.ParseIP("2001:db8::20"), 40000, true)
+	want6 := "ip6 and tcp and src host 2001:db8::20 and dst port 40000"
+	if got6 != want6 {
+		t.Errorf("v6 filter = %q, want %q", got6, want6)
 	}
 }
 
@@ -246,13 +253,36 @@ func TestSelectEngineRejectsUnknownName(t *testing.T) {
 	}
 }
 
-func TestSYNScannerRejectsIPv6WithAdvice(t *testing.T) {
-	_, err := (&SYNScanner{}).Scan(context.Background(), "2001:db8::1", []int{80})
-	if err == nil {
-		t.Fatal("want an error for IPv6")
+func TestBuildSYNChecksumsIPv6WithItsOwnPseudoHeader(t *testing.T) {
+	// TCP's checksum covers a pseudo-header of the addresses, and IPv6's differs
+	// from IPv4's. A v6 probe checksummed as v4 is dropped by the target as
+	// corrupt, which would look exactly like a filtered port.
+	src, dst := net.ParseIP("2001:db8::1"), net.ParseIP("2001:db8::20")
+	raw, err := buildSYN(src, dst, 40000, 443, true)
+	if err != nil {
+		t.Fatalf("buildSYN: %v", err)
 	}
-	if !strings.Contains(err.Error(), "connect") {
-		t.Errorf("error should point at the engine that does work: %v", err)
+	tcp := decodeTCP(t, raw)
+	if !tcp.SYN || tcp.DstPort != 443 {
+		t.Errorf("v6 probe = %+v, want a SYN to 443", tcp)
+	}
+	if tcp.Checksum == 0 {
+		t.Fatal("checksum was never computed")
+	}
+
+	// Same segment, same addresses, computed as v4-vs-v6 must differ.
+	v4Same, err := buildSYN(net.IPv4(192, 168, 1, 1), net.IPv4(192, 168, 1, 20), 40000, 443, false)
+	if err != nil {
+		t.Fatalf("buildSYN: %v", err)
+	}
+	if decodeTCP(t, v4Same).Checksum == tcp.Checksum {
+		t.Error("v4 and v6 pseudo-headers produced the same checksum")
+	}
+}
+
+func TestRawNetworkPicksTheFamily(t *testing.T) {
+	if rawNetwork(false) != "ip4:tcp" || rawNetwork(true) != "ip6:tcp" {
+		t.Error("the raw socket family must follow the target's family")
 	}
 }
 

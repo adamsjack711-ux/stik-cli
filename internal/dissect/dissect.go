@@ -1,6 +1,6 @@
-// Package dissect turns raw link-layer frames into Observations. It parses
-// only the three broadcast/multicast protocols stik listens to — ARP, mDNS,
-// and DHCP — and nothing else on the wire.
+// Package dissect turns raw link-layer frames into Observations. It parses only
+// the broadcast/multicast protocols stik listens to — ARP, NDP, mDNS and DHCP —
+// and nothing else on the wire.
 //
 // Everything here is pure: Frame([]byte) takes bytes and returns facts, with
 // no capture, no cgo, no I/O. That is what lets the dissectors be tested
@@ -29,6 +29,10 @@ func Frame(data []byte) (obs model.Observation, ok bool) {
 
 	if arp := pkt.Layer(layers.LayerTypeARP); arp != nil {
 		return fromARP(arp.(*layers.ARP))
+	}
+
+	if icmp := pkt.Layer(layers.LayerTypeICMPv6); icmp != nil {
+		return fromNDP(pkt, icmp.(*layers.ICMPv6))
 	}
 
 	udpLayer := pkt.Layer(layers.LayerTypeUDP)
