@@ -130,8 +130,12 @@ func (s *SYNScanner) Scan(ctx context.Context, host string, ports []int) ([]mode
 				time.Sleep(s.Rate)
 			}
 		}
+		// Wait for the reply window — but stop the moment every port has
+		// answered. Sitting out the full timeout after the last reply is pure
+		// dead time, and it is most of a scan's wall clock on a live host.
 		select {
 		case <-time.After(timeout):
+		case <-tracker.answered():
 		case <-ctx.Done():
 		}
 	}
@@ -221,19 +225,36 @@ func buildSYN(src, dst net.IP, sport, dport uint16) ([]byte, error) {
 
 // synTracker collects per-port state as replies arrive.
 type synTracker struct {
-	mu     sync.Mutex
-	ports  []int
-	state  map[int]model.PortState
-	errors map[int]error
+	mu       sync.Mutex
+	ports    []int
+	wanted   map[int]bool // the requested set, so a stray reply can't complete us
+	state    map[int]model.PortState
+	errors   map[int]error
+	complete chan struct{}
+	closed   bool
 }
 
 func newSYNTracker(ports []int) *synTracker {
-	return &synTracker{
-		ports:  append([]int(nil), ports...),
-		state:  make(map[int]model.PortState, len(ports)),
-		errors: map[int]error{},
+	t := &synTracker{
+		ports:    append([]int(nil), ports...),
+		wanted:   make(map[int]bool, len(ports)),
+		state:    make(map[int]model.PortState, len(ports)),
+		errors:   map[int]error{},
+		complete: make(chan struct{}),
 	}
+	for _, p := range ports {
+		t.wanted[p] = true
+	}
+	if len(ports) == 0 {
+		t.closed = true
+		close(t.complete)
+	}
+	return t
 }
+
+// answered closes once every requested port has a state, so the scan can stop
+// waiting the moment there is nothing left to wait for.
+func (t *synTracker) answered() <-chan struct{} { return t.complete }
 
 // record keeps the first meaningful answer for a port; a later duplicate or an
 // uninterpretable flag combination never overwrites it.
@@ -243,8 +264,15 @@ func (t *synTracker) record(port int, state model.PortState) {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if !t.wanted[port] {
+		return // a reply for a port we never asked about proves nothing
+	}
 	if _, seen := t.state[port]; !seen {
 		t.state[port] = state
+	}
+	if !t.closed && len(t.state) == len(t.wanted) {
+		t.closed = true
+		close(t.complete)
 	}
 }
 
