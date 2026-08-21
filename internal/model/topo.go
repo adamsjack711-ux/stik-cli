@@ -23,6 +23,17 @@ const (
 	EvLocal      EdgeEvidence = "local"       // the interface stik-net itself sits on
 )
 
+// NodeChange marks how a node differs from the run being compared against. It
+// is empty on an ordinary map — only a diff sets it.
+type NodeChange string
+
+const (
+	ChangeAdded   NodeChange = "added"   // present now, absent before
+	ChangeRemoved NodeChange = "removed" // present before, gone now
+	ChangeWorse   NodeChange = "worse"   // still here, worst finding got worse
+	ChangeBetter  NodeChange = "better"  // still here, worst finding improved
+)
+
 // Node is one thing on the map.
 type Node struct {
 	ID     string   `json:"id"` // IP, or the CIDR for a subnet node
@@ -32,6 +43,11 @@ type Node struct {
 	Sev    Severity `json:"sev"`           // worst finding on the node → colour
 	Open   int      `json:"open"`          // open services → size
 	MAC    string   `json:"mac,omitempty"` // when the passive registry knows it
+
+	// These three are set only on a diffed map, where they drive highlighting.
+	Change   NodeChange `json:"change,omitempty"`
+	PrevSev  Severity   `json:"prev_sev,omitempty"`  // severity in the earlier run
+	PrevOpen int        `json:"prev_open,omitempty"` // open services in the earlier run
 }
 
 // Edge is a relationship between two nodes. Inferred marks the ones stik-net
@@ -42,6 +58,9 @@ type Edge struct {
 	To       string       `json:"to"`
 	Evidence EdgeEvidence `json:"evidence"`
 	Inferred bool         `json:"inferred"`
+
+	// Change is set only on a diffed map.
+	Change NodeChange `json:"change,omitempty"`
 }
 
 // Graph is the inferred picture of the network: nodes, why they're connected,

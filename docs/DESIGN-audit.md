@@ -350,8 +350,18 @@ with devices — the last run is the baseline, and what matters is what changed.
   one second silently overwrote each other — which would have destroyed the
   baseline a diff compares against and made the next diff report "nothing
   changed" against itself. `SaveRun` now suffixes on collision.
-- **Not done:** the topo diff (nodes/edges appearing and vanishing on the map).
-  The data is there — every run stores its graph — so it is a renderer, not an
-  inference problem.
+**M7, part two — the topo diff (shipped):**
+
+`stik-net diff --map` marks the tree and `--out` writes a highlighted map. The
+result is the **union of both runs as one graph**, with each node and edge
+marked added / removed / worse / better, so the existing renderers draw it and
+no second layout exists to drift out of sync. A removed host is carried over
+from the earlier map, because the picture should still show where it used to
+sit. Change markers live on `model.Node`, empty on an ordinary map, so nothing
+about a normal render shifts.
+
+- **A subnet's severity is a roll-up, so it is coloured but never counted.**
+  One host getting worse drags its subnet up with it; counting both would report
+  one event twice. A test pins this.
 
 Ship M1–M5 for a usable auditor with a map; M6+ is polish and depth.

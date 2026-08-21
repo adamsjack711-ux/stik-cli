@@ -101,11 +101,13 @@ func Fragment(v View) (template.HTML, error) {
 		Graph, Details template.JS
 		Nodes          []model.Node
 		Inferred       int
+		Diffed         bool
 	}{
 		Graph:    template.JS(graphJSON),
 		Details:  template.JS(detailJSON),
 		Nodes:    v.Graph.Nodes,
 		Inferred: countInferred(v.Graph),
+		Diffed:   diffed(v.Graph),
 	})
 	if err != nil {
 		return "", err
@@ -128,6 +130,17 @@ func WriteHTML(w io.Writer, v View) error {
 		Subtitle string
 		Map      template.HTML
 	}{Title: title, Subtitle: v.Subtitle, Map: frag})
+}
+
+// diffed reports whether this graph carries change markers, so the legend
+// explains them only when there is something to explain.
+func diffed(g model.Graph) bool {
+	for _, n := range g.Nodes {
+		if n.Change != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func countInferred(g model.Graph) int {
