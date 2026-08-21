@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"net"
+	"time"
+)
 
 // Host is an IP-keyed record produced by the active audit path, as distinct
 // from Device (which is MAC-keyed passive identity). When the passive registry
@@ -48,4 +51,20 @@ type TLSInfo struct {
 	Expired    bool     `json:"expired,omitempty"`     // NotAfter is in the past
 	SelfSigned bool     `json:"self_signed,omitempty"` // subject == issuer
 	DNSNames   []string `json:"dns_names,omitempty"`   // SANs
+}
+
+// LessIP orders addresses numerically rather than lexically, so .9 sorts before
+// .10 and a report re-run on an unchanged network reads the same way twice.
+func LessIP(a, b string) bool {
+	ia, ib := net.ParseIP(a), net.ParseIP(b)
+	if ia == nil || ib == nil {
+		return a < b
+	}
+	a16, b16 := ia.To16(), ib.To16()
+	for i := range a16 {
+		if a16[i] != b16[i] {
+			return a16[i] < b16[i]
+		}
+	}
+	return false
 }

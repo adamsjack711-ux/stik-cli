@@ -171,6 +171,7 @@ The commands above are the passive watcher. The three below are the **active aud
 | `stik-net ports [target] --scope <file>` | Connect-scan open ports and identify the services (`--no-fingerprint` for a quieter run) |
 | `stik-net audit [target] --scope <file>` | The full pass: discover → scan → fingerprint → ranked findings (`--out report.html`) |
 | `stik-net topo` | Draw the network map from the last audit (`--from <run>`, `--out map.html`, `--ascii`) |
+| `stik-net diff` | What changed between the last two audits (`--from`, `--to`, `--fail-on`) — scans nothing |
 
 ```
 $ stik-net devices
@@ -216,6 +217,28 @@ HIGH  SMB reachable on the network
 ```
 
 `--out report.html` also writes a self-contained HTML report — no scripts, no external stylesheets, nothing fetched when it opens — suitable for handing to someone else.
+
+### What changed since last time
+
+Every audit saves its run, so the auditor can do what the watcher does with devices: treat last time as the baseline and tell you what moved.
+
+```
+$ stik-net diff
+change since last audit 2026-08-20 09:14:02 → 2026-08-21 09:15:41
+
+  + port 192.168.1.20:445 microsoft-ds  Samba 4.19.5  (Jack's NAS)
+  - port 192.168.1.42:21  ftp
+
+new findings
+  high     SMB reachable on the network  192.168.1.20:445 · STIK-A004
+
+no longer present
+  medium   FTP without transport encryption  192.168.1.42:21 · STIK-A020
+```
+
+It scans nothing — both sides come off disk. `stik-net audit --diff` does the same immediately after a scan, which is the shape a nightly re-audit wants.
+
+The `--fail-on` gate counts **only findings that are new**, so a known issue can't fail your pipeline every night, and fixing something never looks like a regression.
 
 ### Scan engines
 

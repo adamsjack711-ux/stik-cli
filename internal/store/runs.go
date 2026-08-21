@@ -34,7 +34,21 @@ func (s *Store) SaveRun(data []byte) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("creating %s: %w", dir, err)
 	}
-	path := filepath.Join(dir, "run-"+s.clock().UTC().Format("20060102-150405")+".json")
+	// Runs are named by timestamp so a directory listing sorts chronologically.
+	// Two runs inside the same second would collide, and a silently overwritten
+	// run is worse than an ugly name: the baseline a diff compares against would
+	// vanish. Suffix on collision rather than clobber.
+	base := "run-" + s.clock().UTC().Format("20060102-150405")
+	path := filepath.Join(dir, base+".json")
+	for n := 2; ; n++ {
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		path = filepath.Join(dir, fmt.Sprintf("%s-%d.json", base, n))
+		if n > 100 {
+			return "", fmt.Errorf("saving run: too many runs in the same second in %s", dir)
+		}
+	}
 
 	tmp, err := os.CreateTemp(dir, ".run-*.tmp")
 	if err != nil {

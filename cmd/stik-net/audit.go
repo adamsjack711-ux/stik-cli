@@ -51,6 +51,9 @@ func (a *app) auditRun(rest []string) error {
 		fmt.Fprintln(a.err, "stik-net: "+saveErr.Error())
 	} else {
 		fmt.Fprintf(a.out, "\n%s %s\n", a.style.Dim("run saved to"), a.style.Cyan(path))
+		if cfg.diff {
+			a.diffAgainstPrevious(report)
+		}
 	}
 
 	if cfg.outPath != "" {
@@ -220,6 +223,7 @@ type auditConfig struct {
 	concurrency int
 	failOn      model.Severity
 	engine      string
+	diff        bool
 }
 
 func parseAuditFlags(args []string) (auditConfig, error) {
@@ -263,6 +267,8 @@ func parseAuditFlags(args []string) (auditConfig, error) {
 			top = n
 		case a == "--full":
 			full = true
+		case a == "--diff":
+			cfg.diff = true
 		case a == "--timeout" || strings.HasPrefix(a, "--timeout="):
 			v, err := valueOf(a, "--timeout", &i, args)
 			if err != nil {

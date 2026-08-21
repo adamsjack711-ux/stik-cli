@@ -2,8 +2,8 @@
 
 Status: draft for review · 2026-08-21
 Progress: M1 (scope + discover) ✅ · M2 (connect ports) ✅ · M3 (fingerprint) ✅ ·
-M4 (audit + report) ✅ · M5 (topology) ✅ · M6 (SYN engine) ✅ · M7 (--cve, UDP,
-re-audit diff) next
+M4 (audit + report) ✅ · M5 (topology) ✅ · M6 (SYN engine) ✅ ·
+M7 re-audit diff ✅ · M7 remainder (--cve enrichment, UDP top-ports) next
 Author: Jack Adams-Lovell
 
 ## 1. Goal & non-goals
@@ -331,5 +331,27 @@ Follow the existing discipline (real serialized fixtures, not mocks):
 7. **M7 (later).** `--cve` OSV/NVD enrichment; UDP top-ports; scheduled re-audit
    that diffs against the last run (reuses the watcher's baseline idea), and a
    topo diff that highlights nodes/edges appearing or vanishing between runs.
+
+**M7, part one — the re-audit diff (shipped):**
+
+`stik-net diff` compares two saved runs and `stik-net audit --diff` compares the
+run it just finished with the previous one. Both scan nothing: the runs are
+already on disk. This is the auditor's version of what the passive watcher does
+with devices — the last run is the baseline, and what matters is what changed.
+
+- **Keys.** Hosts by IP, services by host+port, findings by rule+host+port. A
+  finding re-observed on the same port is continuity, not news.
+- **The severity gate counts only what appeared.** `--fail-on` looks at new
+  findings alone, so a known high finding cannot fail a change gate every night,
+  and fixing something can never look like a regression.
+- **One event, reported once.** A host that vanished is one line, not one line
+  per port it used to have open.
+- **Bug this shook out:** runs were named to the second, so two audits inside
+  one second silently overwrote each other — which would have destroyed the
+  baseline a diff compares against and made the next diff report "nothing
+  changed" against itself. `SaveRun` now suffixes on collision.
+- **Not done:** the topo diff (nodes/edges appearing and vanishing on the map).
+  The data is there — every run stores its graph — so it is a renderer, not an
+  inference problem.
 
 Ship M1–M5 for a usable auditor with a map; M6+ is polish and depth.
