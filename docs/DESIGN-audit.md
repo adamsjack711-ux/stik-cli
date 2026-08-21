@@ -2,7 +2,7 @@
 
 Status: draft for review · 2026-08-21
 Progress: M1 (scope + discover) ✅ · M2 (connect ports) ✅ · M3 (fingerprint) ✅ ·
-M4 (audit + report) next
+M4 (audit + report) ✅ · M5 (topology) next
 Author: Jack Adams-Lovell
 
 ## 1. Goal & non-goals
@@ -160,6 +160,24 @@ subject) and a one-line fix — same shape as the web-audit report.
 
 Explicitly **not** in v1: live CVE lookups (defer to a later `--cve` mode that
 hits OSV/NVD), and any check that requires authenticating to the service.
+
+**Where the shipped ruleset departs from this plan (M4):**
+
+- **Self-signed certs are LOW, not MEDIUM.** On the home and lab networks this
+  tool is pointed at, every NAS, printer and router is self-signed; at MEDIUM
+  the finding is noise that trains the reader to skim. Expired certs stay
+  MEDIUM, and the two are mutually exclusive so a stale appliance cert produces
+  one finding, not two.
+- **No INFO findings.** The design used INFO as inventory; the report carries a
+  real inventory section instead ("what's reachable"), which says the same thing
+  without diluting the findings list.
+- **"Unauth Redis/Mongo/ES" ships as "reachable", not "unauthenticated".**
+  Proving a datastore is unauthenticated means issuing a command to it, which is
+  a §1 non-goal. The rule reports exposure and says plainly what it did and
+  didn't check.
+- **Exit codes** are 0 clean / 1 at-or-above `--fail-on` (default `high`) /
+  2 the run itself failed, so a broken scope file can never be read by a
+  pipeline as a clean scan.
 
 ## 7.5. Topology
 
