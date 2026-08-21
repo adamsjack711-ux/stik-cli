@@ -2,7 +2,7 @@
 
 Status: draft for review · 2026-08-21
 Progress: M1 (scope + discover) ✅ · M2 (connect ports) ✅ · M3 (fingerprint) ✅ ·
-M4 (audit + report) ✅ · M5 (topology) next
+M4 (audit + report) ✅ · M5 (topology) ✅ · M6 (SYN engine) next
 Author: Jack Adams-Lovell
 
 ## 1. Goal & non-goals
@@ -235,6 +235,27 @@ Node labels reuse the registry join (§3), so the map reads "Router → Jack's
 NAS, Office printer, unknown 192.168.1.99" — a named picture, not an IP soup.
 The topology is **inferred structure, clearly labeled as such**, never claimed
 as authoritative cabling.
+
+**What M5 actually shipped, and what it didn't:**
+
+- **No traceroute.** The design called for one traceroute per routed subnet to
+  build a router tree. It isn't here: traceroute needs raw sockets (root) and
+  the networks this tool is aimed at are single-subnet, where it is a no-op. The
+  edge kinds are in the model, so adding `traceroute-hop` later changes the
+  inference, not the renderers. Until then the map draws subnet stars, and says
+  which links it reasoned rather than watched.
+- **Gateways are found two ways, and the map distinguishes them.** A host the
+  passive watcher saw handing out DHCP leases is an *observed* gateway (solid
+  edge). Otherwise the `.1` convention is used as a fallback and drawn dashed —
+  a guess that is labelled a guess ("gateway · assumed" in the tree).
+- **The graph is persisted with the run.** `topo --from <run>` re-renders the
+  stored graph rather than re-inferring it, which is what makes redrawing
+  provably probe-free: the command never touches the probe, scan, or fingerprint
+  packages at all. Runs live in `~/.stik/runs/`, written atomically.
+- **The canvas graph has no test for its rendering.** Go tests cover the
+  inference, the ASCII tree, escaping, and self-containment; a `node --check`
+  test (skipped when node is absent) stops a syntax error shipping. Actual
+  layout and click behaviour in a browser is unverified by CI.
 
 ## 8. Reporting
 

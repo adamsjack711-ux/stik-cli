@@ -88,6 +88,8 @@ func run(args []string) int {
 		err = a.cmdPorts(rest)
 	case "audit":
 		err = a.cmdAudit(rest)
+	case "topo", "map":
+		err = a.cmdTopo(rest)
 	case "daemon":
 		err = a.cmdDaemon(notifySpecs)
 	case "service":
@@ -132,6 +134,7 @@ Usage:
   stik-net discover     active host sweep of an authorized scope (needs --scope)
   stik-net ports [tgt]  connect-scan open ports and identify the services (needs --scope)
   stik-net audit [tgt]  full pass: discover, scan, fingerprint, rank findings (needs --scope)
+  stik-net topo         draw the network map from the last audit (--from, --scope, --out)
   stik-net daemon       background watcher; alerts on a new device, rogue DHCP, or ARP spoofing
   stik-net service ...  install/uninstall/status the boot service (needs sudo)
   stik-net name <who>   name a device (by name, hostname, IP, or MAC)
@@ -145,7 +148,9 @@ Flags:
                       https://…               POST the event as JSON to a webhook
                     Or set STIK_NOTIFY=target1,target2 in the environment.
   --no-fingerprint  ports: list open ports only; don't identify the services
-  --out <file>      audit: also write the self-contained HTML report here
+  --out <file>      audit/topo: also write the self-contained HTML report/map here
+  --from <run>      topo: redraw a saved run ("last", or a path) without scanning
+  --ascii           topo: print the tree even when writing an HTML map
   --fail-on <sev>   audit: exit 1 when a finding reaches this severity (default high)
                     audit exits 0 when clean, 1 on findings, 2 if the run failed
   --help, -h        this help
