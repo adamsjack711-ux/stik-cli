@@ -90,6 +90,8 @@ func run(args []string) int {
 		err = a.cmdAudit(rest)
 	case "topo", "map":
 		err = a.cmdTopo(rest)
+	case "diff":
+		err = a.cmdDiff(rest)
 	case "daemon":
 		err = a.cmdDaemon(notifySpecs)
 	case "service":
@@ -135,6 +137,7 @@ Usage:
   stik-net ports [tgt]  connect-scan open ports and identify the services (needs --scope)
   stik-net audit [tgt]  full pass: discover, scan, fingerprint, rank findings (needs --scope)
   stik-net topo         draw the network map from the last audit (--from, --scope, --out)
+  stik-net diff         what changed between the last two audits (scans nothing)
   stik-net daemon       background watcher; alerts on a new device, rogue DHCP, or ARP spoofing
   stik-net service ...  install/uninstall/status the boot service (needs sudo)
   stik-net name <who>   name a device (by name, hostname, IP, or MAC)
@@ -151,7 +154,9 @@ Flags:
                     needs sudo), or auto. A fallback to connect is always reported.
   --no-fingerprint  ports: list open ports only; don't identify the services
   --out <file>      audit/topo: also write the self-contained HTML report/map here
-  --from <run>      topo: redraw a saved run ("last", or a path) without scanning
+  --from <run>      topo/diff: a saved run ("last", or a path) — no scanning
+  --to <run>        diff: the newer run to compare against (default: the latest)
+  --diff            audit: after scanning, show what changed since the last run
   --ascii           topo: print the tree even when writing an HTML map
   --fail-on <sev>   audit: exit 1 when a finding reaches this severity (default high)
                     audit exits 0 when clean, 1 on findings, 2 if the run failed

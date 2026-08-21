@@ -97,3 +97,36 @@ func TestLoadRunByPath(t *testing.T) {
 func writeFile(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o644)
 }
+
+func TestSaveRunNeverOverwritesAnEarlierRun(t *testing.T) {
+	// Two audits inside the same second must both survive: the older one is the
+	// baseline a diff compares against, and losing it silently would make the
+	// next diff compare a run with itself and report "nothing changed".
+	s := testStore(t)
+	at := time.Date(2026, 8, 21, 10, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return at }
+
+	first, err := s.SaveRun([]byte(`{"run":1}`))
+	if err != nil {
+		t.Fatalf("SaveRun: %v", err)
+	}
+	second, err := s.SaveRun([]byte(`{"run":2}`))
+	if err != nil {
+		t.Fatalf("SaveRun: %v", err)
+	}
+	if first == second {
+		t.Fatalf("both runs wrote to %s — the first was destroyed", first)
+	}
+
+	runs, err := s.ListRuns()
+	if err != nil {
+		t.Fatalf("ListRuns: %v", err)
+	}
+	if len(runs) != 2 {
+		t.Fatalf("ListRuns = %d, want both runs", len(runs))
+	}
+	data, _, err := s.LoadRun(first)
+	if err != nil || string(data) != `{"run":1}` {
+		t.Errorf("the first run should still be readable, got %s (%v)", data, err)
+	}
+}

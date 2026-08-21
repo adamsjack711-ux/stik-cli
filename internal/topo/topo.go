@@ -53,7 +53,7 @@ func Build(in Input) model.Graph {
 	g := model.Graph{}
 	for _, cidr := range order {
 		hosts := members[cidr]
-		sort.Slice(hosts, func(i, j int) bool { return lessIP(hosts[i].IP, hosts[j].IP) })
+		sort.Slice(hosts, func(i, j int) bool { return model.LessIP(hosts[i].IP, hosts[j].IP) })
 
 		gateway := pickGateway(hosts, cidr, in.DHCPServers)
 		g.Nodes = append(g.Nodes, model.Node{
@@ -234,21 +234,6 @@ func stringSet(items []string) map[string]bool {
 		set[s] = true
 	}
 	return set
-}
-
-// lessIP orders addresses numerically, so .9 sorts before .10.
-func lessIP(a, b string) bool {
-	ia, ib := net.ParseIP(a), net.ParseIP(b)
-	if ia == nil || ib == nil {
-		return a < b
-	}
-	a16, b16 := ia.To16(), ib.To16()
-	for i := range a16 {
-		if a16[i] != b16[i] {
-			return a16[i] < b16[i]
-		}
-	}
-	return false
 }
 
 // LocalAddresses lists this machine's own non-loopback addresses, for the "you
