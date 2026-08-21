@@ -22,6 +22,9 @@ const mapFragment = `
     <span><i class="dot sev-none"></i>no findings</span>
     <span class="rule"><i class="line solid"></i>observed</span>
     <span class="rule"><i class="line dashed"></i>inferred{{if .Inferred}} ({{.Inferred}}){{end}}</span>
+    {{if .Diffed}}<span class="rule"><i class="ring added"></i>added</span>
+    <span class="rule"><i class="ring removed"></i>gone</span>
+    <span class="rule"><i class="ring worse"></i>worse</span>{{end}}
   </div>
   <ul class="stik-map-fallback" id="stik-map-fallback">
     {{range .Nodes}}<li><strong>{{.ID}}</strong> {{.Label}} <em>{{.Kind}}</em>{{if .Open}} · {{.Open}} open{{end}}</li>
@@ -50,6 +53,11 @@ const mapFragment = `
 .stik-map-legend .dot.sev-low { background: #2b6ea8; }
 .stik-map-legend .dot.sev-none { background: #8a9099; }
 .stik-map-fallback { font-size: .85rem; }
+.stik-map-legend i.ring { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%;
+  border: 2px solid currentColor; margin-right: .3rem; vertical-align: middle; }
+.stik-map-legend .ring.added { color: #2e9e5b; }
+.stik-map-legend .ring.removed { color: #8a9099; }
+.stik-map-legend .ring.worse { color: #c02339; }
 </style>
 <script>
 (function () {
@@ -77,6 +85,7 @@ const mapFragment = `
     return {
       id: n.id, kind: n.kind, label: n.label, sev: n.sev || "", open: n.open || 0,
       mac: n.mac || "", subnet: n.subnet || "",
+      change: n.change || "",
       x: W / 2 + (rand() - 0.5) * W * 0.6, y: H / 2 + (rand() - 0.5) * H * 0.6,
       vx: 0, vy: 0, i: i
     };
@@ -84,7 +93,7 @@ const mapFragment = `
   var index = {};
   nodes.forEach(function (n) { index[n.id] = n; });
   var edges = (GRAPH.edges || []).map(function (e) {
-    return { a: index[e.from], b: index[e.to], inferred: !!e.inferred, evidence: e.evidence };
+    return { a: index[e.from], b: index[e.to], inferred: !!e.inferred, evidence: e.evidence, change: e.change || "" };
   }).filter(function (e) { return e.a && e.b; });
 
   // Fruchterman-Reingold: repulsion between every pair, springs along edges,
@@ -156,7 +165,7 @@ const mapFragment = `
 
     edges.forEach(function (e) {
       ctx.beginPath();
-      ctx.strokeStyle = faint();
+      ctx.strokeStyle = e.change === "added" ? "#2e9e5b" : faint();
       ctx.lineWidth = e.inferred ? 1 : 1.6;
       ctx.setLineDash(e.inferred ? [4, 4] : []);
       ctx.moveTo(e.a.x, e.a.y);
@@ -173,9 +182,19 @@ const mapFragment = `
       } else {
         ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
       }
+      ctx.globalAlpha = n.change === "removed" ? 0.4 : 1;
       ctx.fillStyle = n.kind === "subnet" ? faint() : sevColor(n.sev);
       ctx.fill();
-      if (n.kind === "gateway" || n.kind === "this-host" || n === selected) {
+      // On a diffed map the outline carries the change; otherwise it marks the
+      // gateway, this host, and whatever is selected.
+      var changeStroke = { added: "#2e9e5b", removed: "#8a9099", worse: "#c02339", better: "#2b6ea8" }[n.change];
+      if (changeStroke) {
+        ctx.lineWidth = 3;
+        ctx.setLineDash(n.change === "removed" ? [3, 3] : []);
+        ctx.strokeStyle = changeStroke;
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else if (n.kind === "gateway" || n.kind === "this-host" || n === selected) {
         ctx.lineWidth = n === selected ? 3 : 2;
         ctx.strokeStyle = ink();
         ctx.stroke();
@@ -188,6 +207,7 @@ const mapFragment = `
       if (caption.length > 22) { caption = caption.slice(0, 21) + "…"; }
       ctx.fillText(caption, n.x, n.y + r + 12);
       if (n.kind === "this-host") { ctx.fillText("you are here", n.x, n.y + r + 24); }
+      ctx.globalAlpha = 1;
     });
   }
 
@@ -208,6 +228,7 @@ const mapFragment = `
     var html = "<h4>" + esc(n.label) + "</h4>";
     var meta = [n.id];
     if (n.kind !== "host") { meta.push(n.kind.replace("-", " ")); }
+    if (n.change) { meta.push(n.change === "worse" || n.change === "better" ? n.change + " since last audit" : n.change); }
     if (n.mac) { meta.push(n.mac); }
     html += '<div class="meta">' + esc(meta.join(" · ")) + "</div>";
 

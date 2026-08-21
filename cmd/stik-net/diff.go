@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/adamsjack711-ux/stik-cli/internal/audit"
 	"github.com/adamsjack711-ux/stik-cli/internal/model"
+	"github.com/adamsjack711-ux/stik-cli/internal/topo"
 )
 
 // cmdDiff compares two saved audit runs. It is the auditor's version of what
@@ -24,6 +27,29 @@ func (a *app) cmdDiff(rest []string) error {
 
 	delta := audit.Diff(before, after)
 	audit.WriteDiffText(a.out, a.style, delta)
+
+	if cfg.showMap || cfg.outPath != "" {
+		graphDelta := topo.DiffGraphs(before.Graph, after.Graph)
+		if graphDelta.Graph.Empty() {
+			fmt.Fprintln(a.out, a.style.Dim("\nno map in these runs to compare"))
+		} else {
+			if cfg.showMap {
+				fmt.Fprintf(a.out, "\n%s\n", a.style.Bold("the map, with what moved"))
+				topo.WriteASCII(a.out, a.style, graphDelta.Graph)
+			}
+			if cfg.outPath != "" {
+				view := topo.ViewFrom(graphDelta.Graph, after.Hosts, after.Findings)
+				view.Title = "Network map — what changed"
+				view.Subtitle = fmt.Sprintf("%s → %s · %d added, %d gone, %d worse",
+					before.StartedAt.Format(time.RFC1123), after.StartedAt.Format(time.RFC1123),
+					len(graphDelta.Added), len(graphDelta.Removed), len(graphDelta.Worse))
+				if err := writeAtomic(cfg.outPath, func(f *os.File) error { return topo.WriteHTML(f, view) }); err != nil {
+					return codedError{code: 2, err: err}
+				}
+				fmt.Fprintf(a.out, "\n%s %s\n", a.style.Dim("map written to"), a.style.Cyan(cfg.outPath))
+			}
+		}
+	}
 
 	if !delta.Empty() && delta.Worst().Rank() >= cfg.failOn.Rank() && len(delta.NewFindings) > 0 {
 		fmt.Fprintf(a.out, "\n%s\n", a.style.Yellow(fmt.Sprintf(
@@ -102,9 +128,11 @@ func (a *app) diffAgainstPrevious(report audit.Report) {
 }
 
 type diffConfig struct {
-	from   string
-	to     string
-	failOn model.Severity
+	from    string
+	to      string
+	outPath string
+	showMap bool
+	failOn  model.Severity
 }
 
 func parseDiffFlags(args []string) (diffConfig, error) {
@@ -124,6 +152,14 @@ func parseDiffFlags(args []string) (diffConfig, error) {
 				return cfg, err
 			}
 			cfg.to = v
+		case a == "--map":
+			cfg.showMap = true
+		case a == "--out" || strings.HasPrefix(a, "--out="):
+			v, err := valueOf(a, "--out", &i, args)
+			if err != nil {
+				return cfg, err
+			}
+			cfg.outPath = v
 		case a == "--fail-on" || strings.HasPrefix(a, "--fail-on="):
 			v, err := valueOf(a, "--fail-on", &i, args)
 			if err != nil {

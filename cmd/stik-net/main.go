@@ -137,7 +137,7 @@ Usage:
   stik-net ports [tgt]  connect-scan open ports and identify the services (needs --scope)
   stik-net audit [tgt]  full pass: discover, scan, fingerprint, rank findings (needs --scope)
   stik-net topo         draw the network map from the last audit (--from, --scope, --out)
-  stik-net diff         what changed between the last two audits (scans nothing)
+  stik-net diff         what changed between the last two audits (--map, --out; scans nothing)
   stik-net daemon       background watcher; alerts on a new device, rogue DHCP, or ARP spoofing
   stik-net service ...  install/uninstall/status the boot service (needs sudo)
   stik-net name <who>   name a device (by name, hostname, IP, or MAC)

@@ -69,7 +69,7 @@ func membersOf(g model.Graph, subnet string) []model.Node {
 }
 
 func hostLine(s ui.Style, g model.Graph, n model.Node) string {
-	parts := []string{s.Bold(padIP(n.ID))}
+	parts := []string{changeMark(s, n) + s.Bold(padIP(n.ID))}
 
 	label := n.Label
 	if label == n.ID {
@@ -95,7 +95,31 @@ func hostLine(s ui.Style, g model.Graph, n model.Node) string {
 	if n.Sev != "" && n.Sev.Rank() > model.SevInfo.Rank() {
 		parts = append(parts, sevColor(s, n.Sev)("● "+string(n.Sev)))
 	}
+	if n.Change == model.ChangeWorse || n.Change == model.ChangeBetter {
+		was := string(n.PrevSev)
+		if was == "" {
+			was = "clean"
+		}
+		parts = append(parts, s.Dim("(was "+was+")"))
+	}
 	return strings.TrimRight(strings.Join(parts, "  "), " ")
+}
+
+// changeMark prefixes a node on a diffed map. An ordinary map has no changes,
+// so every line keeps its two leading spaces and nothing shifts.
+func changeMark(s ui.Style, n model.Node) string {
+	switch n.Change {
+	case model.ChangeAdded:
+		return s.Yellow("+ ")
+	case model.ChangeRemoved:
+		return s.Dim("- ")
+	case model.ChangeWorse:
+		return s.Red("! ")
+	case model.ChangeBetter:
+		return s.Green("✓ ")
+	default:
+		return "  "
+	}
 }
 
 // gatewayNote says whether the router position was watched or assumed.

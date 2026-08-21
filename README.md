@@ -238,6 +238,19 @@ no longer present
 
 It scans nothing — both sides come off disk. `stik-net audit --diff` does the same immediately after a scan, which is the shape a nightly re-audit wants.
 
+`--map` marks the same changes on the tree, and `--out changed.html` writes a map where added nodes are ringed green, departed ones ghosted, and anything that got worse ringed red:
+
+```
+$ stik-net diff --map
+the map, with what moved
+
+192.168.1.0/24
+ ├─   192.168.1.1      the router      gateway · serves DHCP
+ ├─ ! 192.168.1.20     Jack's NAS                      2 open  ● high  (was clean)
+ ├─ + 192.168.1.99     unknown host                    1 open
+ └─ - 192.168.1.42     office printer
+```
+
 The `--fail-on` gate counts **only findings that are new**, so a known issue can't fail your pipeline every night, and fixing something never looks like a regression.
 
 ### Scan engines
