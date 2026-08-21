@@ -10,7 +10,7 @@ type Host struct {
 	IP           string    `json:"ip"`
 	MAC          string    `json:"mac,omitempty"`
 	Up           bool      `json:"up"`
-	DiscoveredBy string    `json:"discovered_by"`    // e.g. "tcp-ping"
+	DiscoveredBy string    `json:"discovered_by"`      // e.g. "tcp-ping"
 	Services     []Service `json:"services,omitempty"` // filled by the port scan
 	ScannedAt    time.Time `json:"scanned_at"`
 }

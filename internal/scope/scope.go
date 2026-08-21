@@ -22,10 +22,10 @@ import (
 // Set is a parsed, immutable collection of authorized targets. The zero value
 // is a valid empty scope that contains nothing.
 type Set struct {
-	nets    []*net.IPNet // CIDRs and single hosts (as /32 or /128)
-	raw     []string     // the authorized lines, verbatim, for the report header
-	source  string       // file path or "<inline>", for provenance
-	sumHex  string       // sha256 of the normalized entries, for the report header
+	nets   []*net.IPNet // CIDRs and single hosts (as /32 or /128)
+	raw    []string     // the authorized lines, verbatim, for the report header
+	source string       // file path or "<inline>", for provenance
+	sumHex string       // sha256 of the normalized entries, for the report header
 }
 
 // Load reads and parses a scope file. A file with no valid entries is an error:

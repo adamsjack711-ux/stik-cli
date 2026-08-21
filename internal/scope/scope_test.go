@@ -23,10 +23,10 @@ func TestContainsCIDRAndHost(t *testing.T) {
 	}{
 		{"192.168.1.1", true},
 		{"192.168.1.255", true},
-		{"192.168.2.1", false},   // adjacent subnet, out of scope
-		{"10.0.0.5", true},       // exact single host
-		{"10.0.0.6", false},      // neighbor of a /32 host is out
-		{"127.0.0.1", false},     // never implicitly in scope
+		{"192.168.2.1", false}, // adjacent subnet, out of scope
+		{"10.0.0.5", true},     // exact single host
+		{"10.0.0.6", false},    // neighbor of a /32 host is out
+		{"127.0.0.1", false},   // never implicitly in scope
 	}
 	for _, c := range cases {
 		if got := s.Contains(net.ParseIP(c.ip)); got != c.want {

@@ -136,8 +136,8 @@ func ipset(ips []net.IP) map[string]bool {
 // authorized scope must not be probed.
 func TestDiscoverInNarrowsToAuth(t *testing.T) {
 	_, port := openListener(t)
-	auth := scopeOf(t, "10.0.0.0/24")            // loopback NOT authorized
-	cand := scopeOf(t, "127.0.0.1/32")           // but named as a target
+	auth := scopeOf(t, "10.0.0.0/24")  // loopback NOT authorized
+	cand := scopeOf(t, "127.0.0.1/32") // but named as a target
 	hosts, _, err := DiscoverIn(context.Background(), auth, cand,
 		Options{Ports: []int{port}, Timeout: 400 * time.Millisecond})
 	if err != nil {
