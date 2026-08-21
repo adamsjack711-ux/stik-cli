@@ -22,9 +22,15 @@ esac
 DIST="dist/${GOOS}-${NODE_ARCH}"
 
 mkdir -p "$DIST"
-echo "building stik-net $VERSION for ${GOOS}/${GOARCH} -> ${DIST}…"
-CGO_ENABLED=1 \
-  go build -ldflags "-s -w -X main.version=$VERSION" -o "$DIST/stik-net" ../cmd/stik-net
+# Two binaries ship together: the passive watcher/auditor, and the UniFi
+# companion. They are separate commands on purpose — stik-net never transmits,
+# stik-unifi authenticates to a controller — and shipping them in one package
+# just saves an install.
+for cmd in stik-net stik-unifi; do
+  echo "building $cmd $VERSION for ${GOOS}/${GOARCH} -> ${DIST}…"
+  CGO_ENABLED=1 \
+    go build -ldflags "-s -w -X main.version=$VERSION" -o "$DIST/$cmd" "../cmd/$cmd"
+done
 
 cp ../LICENSE .
 
@@ -33,4 +39,4 @@ cp ../LICENSE .
 sed 's#demo/stik.gif#https://raw.githubusercontent.com/adamsjack711-ux/stik-cli/main/demo/stik.gif#g' \
   ../README.md > README.md
 
-echo "staged npm/ (${DIST}/stik-net, README.md, LICENSE)"
+echo "staged npm/ (${DIST}/stik-net, ${DIST}/stik-unifi, README.md, LICENSE)"
