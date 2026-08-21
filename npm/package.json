@@ -30,7 +30,8 @@
     "url": "https://github.com/adamsjack711-ux/stik-cli/issues"
   },
   "bin": {
-    "stik-net": "bin/stik-net.js"
+    "stik-net": "bin/stik-net.js",
+    "stik-unifi": "bin/stik-unifi.js"
   },
   "files": [
     "bin",

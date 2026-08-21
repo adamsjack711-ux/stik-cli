@@ -26,7 +26,7 @@ Every other tool in this space — Wireshark, nmap, tcpdump — hands you **evid
 
 ## Install
 
-stik-net is a single Go binary. It uses `libpcap` for capture (bundled on macOS; `libpcap0.8` ships on most Linux desktops). The npm package is `stik-cli`; the installed command is **`stik-net`** (the bare `stik` name belongs to an unrelated tool).
+stik-net is a single Go binary (the package also ships `stik-unifi`, a separate companion — see below). It uses `libpcap` for capture (bundled on macOS; `libpcap0.8` ships on most Linux desktops). The npm package is `stik-cli`; the installed command is **`stik-net`** (the bare `stik` name belongs to an unrelated tool).
 
 ```bash
 # npm (macOS arm64, Linux x64/arm64 — ships prebuilt binaries, no toolchain needed)
@@ -331,6 +331,38 @@ $ stik-net topo
 The map is **inference, and it says so**. A solid link is a relationship stik-net watched happen: the passive watcher saw that host hand out DHCP leases, or holds its MAC↔IP pairing. A dashed link is arithmetic on the addresses. A gateway found via DHCP is labelled "serves DHCP"; one guessed from the `.1` convention is labelled "assumed". stik-net does not know your cabling and does not pretend to.
 
 ---
+
+## stik-unifi — the companion that asks the controller
+
+If the network you're looking at is a UniFi setup, the controller already knows things no amount of listening will tell you: which VLANs exist, which of them are isolated, and which client is on which. `stik-unifi` asks it.
+
+```bash
+stik-unifi map --host 192.168.1.1 --user admin
+```
+
+```
+UniFi segmentation  site default
+
+  ! "Guest" is a guest network with isolation off
+
+networks
+
+  ! Guest  VLAN 20 · 192.168.20.0/24 · guest
+      a guest network without isolation: guests can reach each other, and often the LAN
+      someone's iPhone          192.168.20.51    wireless  guest
+
+  ○ IoT  VLAN 30 · 192.168.30.0/24 · corporate
+      isolated from the other networks
+      Espressif device          192.168.30.11    wireless
+```
+
+**It is a separate binary, and that is the point.** stik-net's promise is that it listens and never transmits. This tool authenticates to a controller with admin credentials — a different activity with different consequences — so it ships as its own command. Running one never implies running the other.
+
+**It is read-only by construction.** The client exposes GET and nothing else, and never reads the CSRF token a UniFi controller requires before it will accept a write. A tool that cannot mint the token cannot make the change, which is a stronger guarantee than a promise not to.
+
+There is deliberately **no `--password` flag**: a password in argv is visible to every process on the machine and lands in shell history. Use `UNIFI_PASS`, or let it prompt.
+
+One honest limit: on UniFi 10 and later, the zone-based firewall's policy matrix has **no read API**. Where the legacy rules are readable they're shown; where they aren't, the map says so rather than implying it has seen your policy.
 
 ## What stik can — and can't — see
 
