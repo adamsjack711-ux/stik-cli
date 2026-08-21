@@ -79,10 +79,18 @@ func writeInventory(w io.Writer, s ui.Style, r Report) {
 		}
 		fmt.Fprintf(w, "  %s  %s\n", s.Bold(padIP(h.IP)), name)
 		for _, svc := range h.Services {
-			if svc.State != model.StateOpen {
+			if svc.State != model.StateOpen && svc.State != model.StateOpenFiltered {
 				continue
 			}
-			fmt.Fprintf(w, "      %s/tcp  %s\n", padPort(svc.Port), serviceLabel(svc))
+			proto := svc.Proto
+			if proto == "" {
+				proto = "tcp"
+			}
+			state := ""
+			if svc.State == model.StateOpenFiltered {
+				state = s.Dim(" open|filtered")
+			}
+			fmt.Fprintf(w, "      %s/%s  %s%s\n", padPort(svc.Port), proto, serviceLabel(svc), state)
 		}
 	}
 }

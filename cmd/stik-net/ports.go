@@ -75,6 +75,7 @@ func (a *app) cmdPorts(rest []string) error {
 		Timeout:     cfg.timeout,
 		Concurrency: cfg.concurrency,
 		Engine:      engine,
+		UDPPorts:    cfg.udpPorts,
 	})
 
 	var fpElapsed time.Duration
@@ -119,8 +120,18 @@ func printPortResults(a *app, reg deviceLookup, hosts []model.Host) {
 			if label == "" {
 				label = a.style.Dim("unknown")
 			}
-			fmt.Fprintf(a.out, "  %s/tcp  %s  %-8s %s\n",
-				a.style.Bold(padPort(s.Port)), a.style.Green("open"), label, serviceDetail(a, s))
+			proto := s.Proto
+			if proto == "" {
+				proto = "tcp"
+			}
+			state := a.style.Green("open")
+			if s.State == model.StateOpenFiltered {
+				// UDP silence. Saying "open" here would be a guess presented as a
+				// result, so the column says what was actually observed.
+				state = a.style.Dim("open|filt")
+			}
+			fmt.Fprintf(a.out, "  %s/%s  %-9s  %-8s %s\n",
+				a.style.Bold(padPort(s.Port)), proto, state, label, serviceDetail(a, s))
 		}
 	}
 }
@@ -175,6 +186,7 @@ type portsConfig struct {
 	concurrency int
 	fingerprint bool
 	engine      string
+	udpPorts    []int
 }
 
 func parsePortsFlags(args []string) (portsConfig, error) {
@@ -214,6 +226,18 @@ func parsePortsFlags(args []string) (portsConfig, error) {
 			full = true
 		case a == "--no-fingerprint":
 			cfg.fingerprint = false
+		case a == "--udp":
+			cfg.udpPorts = portscan.DefaultUDPPorts
+		case a == "--udp-ports" || strings.HasPrefix(a, "--udp-ports="):
+			v, err := valueOf(a, "--udp-ports", &i, args)
+			if err != nil {
+				return cfg, err
+			}
+			ports, err := parsePorts(v)
+			if err != nil {
+				return cfg, err
+			}
+			cfg.udpPorts = ports
 		case a == "--engine" || strings.HasPrefix(a, "--engine="):
 			v, err := valueOf(a, "--engine", &i, args)
 			if err != nil {

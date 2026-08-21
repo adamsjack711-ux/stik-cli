@@ -3,7 +3,7 @@
 Status: draft for review · 2026-08-21
 Progress: M1 (scope + discover) ✅ · M2 (connect ports) ✅ · M3 (fingerprint) ✅ ·
 M4 (audit + report) ✅ · M5 (topology) ✅ · M6 (SYN engine) ✅ ·
-M7 re-audit diff ✅ · M7 remainder (--cve enrichment, UDP top-ports) next
+M7 re-audit diff ✅ · topo diff ✅ · UDP ✅ · M7 remainder (--cve) next
 Author: Jack Adams-Lovell
 
 ## 1. Goal & non-goals
@@ -350,6 +350,32 @@ with devices — the last run is the baseline, and what matters is what changed.
   one second silently overwrote each other — which would have destroyed the
   baseline a diff compares against and made the next diff report "nothing
   changed" against itself. `SaveRun` now suffixes on collision.
+**M7, part three — UDP (shipped):**
+
+UDP is a different problem from TCP, and pretending otherwise is how scanners
+produce confident nonsense.
+
+- **Three states, not two.** `open` when something answered, `closed` on ICMP
+  port unreachable, and **`open|filtered`** for silence — because a service with
+  nothing to say to our probe is indistinguishable from a dropped packet.
+  Reporting either "open" or "filtered" there would be a guess dressed as a
+  result. No rule fires on `open|filtered` for the same reason.
+- **Unprivileged.** A *connected* UDP socket surfaces the ICMP unreachable as
+  `ECONNREFUSED`, so closed detection needs no raw socket and no root.
+- **Real payloads.** An empty datagram gets nothing back from a resolver or an
+  NTP server, so each known port gets the smallest well-formed request that
+  protocol answers (DNS `version.bind`, NTP mode 3, SSDP M-SEARCH, NetBIOS node
+  status, mDNS service enumeration, TFTP read, IPMI presence ping).
+- **Two lines this stays behind.** Every payload is a read or a presence check —
+  nothing asks a service to *do* anything. And 67/68 get the generic probe
+  rather than a real DHCPDISCOVER: requesting a lease takes an address off the
+  network, which is a change, not an observation. A test pins that.
+- **SNMP uses the default community "public",** which is default-credential
+  *detection* as §1 allows (one request, never a spray). An agent that answers
+  is itself the finding.
+- **Short port list on purpose.** UDP has no handshake, so every silent port
+  costs a full timeout. A useful sweep is a dozen ports, not a thousand.
+
 **M7, part two — the topo diff (shipped):**
 
 `stik-net diff --map` marks the tree and `--out` writes a highlighted map. The

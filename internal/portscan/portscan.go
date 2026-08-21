@@ -38,6 +38,11 @@ type Options struct {
 	Engine Scanner
 	// HostConcurrency bounds how many hosts an Engine scans at once; default 8.
 	HostConcurrency int
+
+	// UDPPorts, when set, adds a UDP pass over the same hosts. It is a separate
+	// list because a useful UDP sweep is a dozen ports, not a thousand: UDP has
+	// no handshake, so every silent port costs a full timeout.
+	UDPPorts []int
 }
 
 func (o Options) withDefaults() Options {
@@ -95,7 +100,8 @@ func ScanHosts(ctx context.Context, sc *scope.Set, hosts []model.Host, opts Opti
 	start := time.Now()
 
 	if opts.Engine != nil {
-		return scanWithEngine(ctx, sc, hosts, opts, start)
+		result, stats := scanWithEngine(ctx, sc, hosts, opts, start)
+		return withUDP(ctx, sc, result, opts, stats, start)
 	}
 
 	type job struct {
@@ -151,12 +157,60 @@ func ScanHosts(ctx context.Context, sc *scope.Set, hosts []model.Host, opts Opti
 		totalOpen += len(svcs)
 	}
 
-	return result, Stats{
+	return withUDP(ctx, sc, result, opts, Stats{
 		Hosts:   len(hosts),
 		Ports:   len(opts.Ports),
 		Open:    totalOpen,
 		Elapsed: time.Since(start),
+	}, start)
+}
+
+// withUDP runs the optional UDP pass and folds its results into each host. Ports
+// that came back open|filtered are kept: on UDP that is a real answer, and
+// dropping it would hide every service that has nothing to say to a probe.
+func withUDP(ctx context.Context, sc *scope.Set, hosts []model.Host, opts Options, stats Stats, start time.Time) ([]model.Host, Stats) {
+	if len(opts.UDPPorts) == 0 {
+		return hosts, stats
 	}
+	scanner := &UDPScanner{Timeout: opts.Timeout}
+	sem := make(chan struct{}, opts.HostConcurrency)
+	extra := make([][]model.Service, len(hosts))
+	var wg sync.WaitGroup
+
+	for hi := range hosts {
+		if !sc.Contains(net.ParseIP(hosts[hi].IP)) { // the same gate as TCP
+			continue
+		}
+		wg.Add(1)
+		go func(hi int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			svcs, _ := scanner.Scan(ctx, hosts[hi].IP, opts.UDPPorts)
+			for _, svc := range svcs {
+				if svc.State == model.StateOpen || svc.State == model.StateOpenFiltered {
+					extra[hi] = append(extra[hi], svc)
+				}
+			}
+		}(hi)
+	}
+	wg.Wait()
+
+	for hi := range hosts {
+		if len(extra[hi]) == 0 {
+			continue
+		}
+		hosts[hi].Services = append(hosts[hi].Services, extra[hi]...)
+		for _, svc := range extra[hi] {
+			if svc.State == model.StateOpen {
+				stats.Open++
+			}
+		}
+	}
+	stats.Ports += len(opts.UDPPorts)
+	stats.Elapsed = time.Since(start)
+	return hosts, stats
 }
 
 // probePort performs one connect probe and classifies the outcome.

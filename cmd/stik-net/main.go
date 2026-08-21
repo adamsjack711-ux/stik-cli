@@ -150,6 +150,8 @@ Flags:
                       ntfy://[server/]topic   push to an ntfy topic
                       https://…               POST the event as JSON to a webhook
                     Or set STIK_NOTIFY=target1,target2 in the environment.
+  --udp             ports/audit: also probe a short list of UDP services
+  --udp-ports <l>   ports/audit: probe these UDP ports instead of the default list
   --engine <name>   ports/audit: connect (default, unprivileged), syn (half-open,
                     needs sudo), or auto. A fallback to connect is always reported.
   --no-fingerprint  ports: list open ports only; don't identify the services
