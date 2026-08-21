@@ -1,7 +1,7 @@
 {
   "name": "stik-cli",
   "version": "0.2.1",
-  "description": "Passive network watcher — tells you in plain English what's on your network, and taps you on the shoulder when something new shows up.",
+  "description": "Passive network watcher \u2014 tells you in plain English what's on your network and taps you on the shoulder when something new shows up \u2014 plus an opt-in, scope-gated auditor that reports what's exposed.",
   "keywords": [
     "network",
     "security",
@@ -12,7 +12,12 @@
     "monitoring",
     "devices",
     "lan",
-    "cli"
+    "cli",
+    "port-scanner",
+    "syn-scan",
+    "network-audit",
+    "network-map",
+    "security-audit"
   ],
   "license": "MIT",
   "author": "Jack Adams-Lovell",
