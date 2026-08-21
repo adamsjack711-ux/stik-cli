@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/adamsjack711-ux/stik-cli/internal/model"
+	"github.com/adamsjack711-ux/stik-cli/internal/topo"
 )
 
 // WriteHTML renders the report as a single self-contained file: no scripts, no
@@ -17,7 +18,16 @@ import (
 // reaches the page through html/template, so a hostile banner is text, not
 // markup.
 func WriteHTML(w io.Writer, r Report) error {
+	var mapFragment template.HTML
+	if !r.Graph.Empty() {
+		frag, err := topo.Fragment(topo.ViewFrom(r.Graph, r.Hosts, r.Findings))
+		if err != nil {
+			return err
+		}
+		mapFragment = frag
+	}
 	return htmlTemplate.Execute(w, htmlView{
+		Map:       mapFragment,
 		Report:    r,
 		Generated: r.StartedAt.Format(time.RFC1123),
 		Elapsed:   r.Elapsed.Round(time.Millisecond).String(),
@@ -29,6 +39,7 @@ func WriteHTML(w io.Writer, r Report) error {
 
 type htmlView struct {
 	Report
+	Map       template.HTML
 	Generated string
 	Elapsed   string
 	Counts    map[model.Severity]int
@@ -147,6 +158,13 @@ footer { color: var(--muted); font-size: .8rem; margin-top: 3rem; border-top: 1p
     {{- end}}
     {{- if not .Findings}}<span class="clean">Clean — no rule fired on anything reachable.</span>{{end}}
   </div>
+
+  {{if .Map}}
+  <h2>The map</h2>
+  <p class="sub">Inferred structure, not observed cabling. Solid links are relationships stik-net watched
+  happen; dashed links are reasoned from addressing.</p>
+  {{.Map}}
+  {{end}}
 
   {{if .Findings}}
   <h2>Findings</h2>

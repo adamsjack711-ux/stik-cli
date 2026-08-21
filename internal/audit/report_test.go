@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/adamsjack711-ux/stik-cli/internal/model"
+	"github.com/adamsjack711-ux/stik-cli/internal/topo"
 	"github.com/adamsjack711-ux/stik-cli/internal/ui"
 )
 
@@ -126,5 +127,35 @@ func TestWriteHTMLParsesAsBalancedDocument(t *testing.T) {
 	}
 	if testing.Verbose() {
 		_ = os.WriteFile("/tmp/stik-report-preview.html", buf.Bytes(), 0o644)
+	}
+}
+
+func TestWriteHTMLEmbedsTheMap(t *testing.T) {
+	r := sampleReport()
+	r.Graph = topo.Build(topo.Input{Hosts: r.Hosts, Findings: r.Findings, Names: r.Names})
+
+	var buf bytes.Buffer
+	if err := WriteHTML(&buf, r); err != nil {
+		t.Fatalf("WriteHTML: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "<canvas") || !strings.Contains(out, "The map") {
+		t.Error("a report with a graph should carry the map")
+	}
+	// The map ships an inline script; it still must not fetch anything.
+	for _, forbidden := range []string{"src=", "http://", "https://", "@import"} {
+		if strings.Contains(out, forbidden) {
+			t.Errorf("report with a map reaches outside: contains %q", forbidden)
+		}
+	}
+}
+
+func TestWriteHTMLWithoutGraphHasNoMapSection(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteHTML(&buf, sampleReport()); err != nil {
+		t.Fatalf("WriteHTML: %v", err)
+	}
+	if strings.Contains(buf.String(), "<canvas") {
+		t.Error("no graph means no map section")
 	}
 }

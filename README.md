@@ -170,6 +170,7 @@ The commands above are the passive watcher. The three below are the **active aud
 | `stik-net discover --scope <file>` | Sweep the authorized ranges for live hosts |
 | `stik-net ports [target] --scope <file>` | Connect-scan open ports and identify the services (`--no-fingerprint` for a quieter run) |
 | `stik-net audit [target] --scope <file>` | The full pass: discover → scan → fingerprint → ranked findings (`--out report.html`) |
+| `stik-net topo` | Draw the network map from the last audit (`--from <run>`, `--out map.html`, `--ascii`) |
 
 ```
 $ stik-net devices
@@ -217,6 +218,25 @@ HIGH  SMB reachable on the network
 `--out report.html` also writes a self-contained HTML report — no scripts, no external stylesheets, nothing fetched when it opens — suitable for handing to someone else.
 
 Exit codes make it usable as a CI gate: **0** clean, **1** when a finding reaches `--fail-on` (default `high`), **2** when the run itself failed.
+
+### The map
+
+Every audit saves its run to `~/.stik/runs/` and infers a picture of the network from it. `stik-net topo` draws that picture — from the **saved** run, so redrawing never re-scans:
+
+```
+$ stik-net topo
+192.168.1.0/24
+ ├─ 192.168.1.1      the router              gateway · serves DHCP   2 open  ● medium
+ ├─ 192.168.1.77     unknown host            you are here
+ ├─ 192.168.1.20     Jack's NAS                                      2 open  ● high
+ └─ 192.168.1.42     office printer                                  1 open
+
+1 of 4 link(s) inferred from addressing, not observed
+```
+
+`--out map.html` writes an interactive version — a force-directed graph on a `<canvas>`, no libraries, nodes coloured by worst finding and sized by open services, click one for its services and findings. The same map is embedded in the audit report.
+
+The map is **inference, and it says so**. A solid link is a relationship stik-net watched happen: the passive watcher saw that host hand out DHCP leases, or holds its MAC↔IP pairing. A dashed link is arithmetic on the addresses. A gateway found via DHCP is labelled "serves DHCP"; one guessed from the `.1` convention is labelled "assumed". stik-net does not know your cabling and does not pretend to.
 
 ---
 

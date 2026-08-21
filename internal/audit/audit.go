@@ -25,6 +25,7 @@ type Report struct {
 	Hosts     []model.Host      `json:"hosts"`
 	Findings  []model.Finding   `json:"findings"`
 	Names     map[string]string `json:"names,omitempty"` // IP → friendly device name
+	Graph     model.Graph       `json:"graph,omitempty"` // inferred topology, drawn by internal/topo
 }
 
 // Evaluate runs every rule against every open service and returns the findings

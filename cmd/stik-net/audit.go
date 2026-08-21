@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -39,21 +40,56 @@ func (a *app) auditRun(rest []string) error {
 	if err != nil {
 		return err
 	}
+	report, err := a.auditPass(cfg)
+	if err != nil {
+		return err
+	}
+
+	audit.WriteText(a.out, a.style, report)
+
+	if path, saveErr := a.saveRun(report); saveErr != nil {
+		fmt.Fprintln(a.err, "stik-net: "+saveErr.Error())
+	} else {
+		fmt.Fprintf(a.out, "\n%s %s\n", a.style.Dim("run saved to"), a.style.Cyan(path))
+	}
+
+	if cfg.outPath != "" {
+		if err := writeAtomic(cfg.outPath, func(f *os.File) error { return audit.WriteHTML(f, report) }); err != nil {
+			return err
+		}
+		fmt.Fprintf(a.out, "\n%s %s\n", a.style.Dim("report written to"), a.style.Cyan(cfg.outPath))
+	}
+
+	if report.Worst().Rank() >= cfg.failOn.Rank() && len(report.Findings) > 0 {
+		fmt.Fprintf(a.out, "%s\n", a.style.Yellow(fmt.Sprintf(
+			"exit 1 — worst finding is %s, at or above --fail-on %s", report.Worst(), cfg.failOn)))
+		return exitCode(1)
+	}
+	return nil
+}
+
+// auditPass is the pipeline itself: discover, scan, fingerprint, evaluate, and
+// infer the map. `audit` and `topo --scope` share it so a map and a report are
+// always built from the same evidence.
+func (a *app) auditPass(cfg auditConfig) (audit.Report, error) {
 	if cfg.scopePath == "" {
-		return errors.New("audit needs --scope <file>: a list of authorized CIDRs/IPs.\n" +
+		return audit.Report{}, errors.New("audit needs --scope <file>: a list of authorized CIDRs/IPs.\n" +
 			"Active scanning only runs against targets you've written down as in-bounds.")
+	}
+	if len(cfg.ports) == 0 {
+		cfg.ports = portscan.DefaultTopPorts
 	}
 
 	auth, err := scope.Load(cfg.scopePath)
 	if err != nil {
-		return err
+		return audit.Report{}, err
 	}
 
 	cand := auth
 	if cfg.target != "" {
 		cand, err = scope.Parse(strings.NewReader(cfg.target))
 		if err != nil {
-			return fmt.Errorf("target %q: %w", cfg.target, err)
+			return audit.Report{}, fmt.Errorf("target %q: %w", cfg.target, err)
 		}
 	}
 
@@ -72,7 +108,7 @@ func (a *app) auditRun(rest []string) error {
 
 	hosts, _, err := probe.DiscoverIn(ctx, auth, cand, probe.Options{Timeout: cfg.timeout})
 	if err != nil && !errors.Is(err, ctx.Err()) {
-		return err
+		return audit.Report{}, err
 	}
 	fmt.Fprintf(a.out, "%s %d host(s) up\n", a.style.Dim("discovered"), len(hosts))
 
@@ -96,41 +132,37 @@ func (a *app) auditRun(rest []string) error {
 		Findings:  audit.Evaluate(hosts),
 		Names:     deviceNames(reg),
 	}
+	report.Graph = graphFor(report, reg, auth.Nets())
+	return report, nil
+}
 
-	audit.WriteText(a.out, a.style, report)
-
-	if cfg.outPath != "" {
-		if err := writeHTMLReport(cfg.outPath, report); err != nil {
-			return err
-		}
-		fmt.Fprintf(a.out, "\n%s %s\n", a.style.Dim("report written to"), a.style.Cyan(cfg.outPath))
+// saveRun persists the finished report so `stik-net topo --from` can redraw it
+// later without going near the network again.
+func (a *app) saveRun(r audit.Report) (string, error) {
+	data, err := json.MarshalIndent(r, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("saving run: %w", err)
 	}
-
-	if report.Worst().Rank() >= cfg.failOn.Rank() && len(report.Findings) > 0 {
-		fmt.Fprintf(a.out, "%s\n", a.style.Yellow(fmt.Sprintf(
-			"exit 1 — worst finding is %s, at or above --fail-on %s", report.Worst(), cfg.failOn)))
-		return exitCode(1)
-	}
-	return nil
+	return a.store.SaveRun(append(data, '\n'))
 }
 
 // writeHTMLReport writes the deliverable atomically, so a half-written file
 // never replaces a good report from an earlier run.
-func writeHTMLReport(path string, r audit.Report) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".stik-report-*")
+func writeAtomic(path string, render func(*os.File) error) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".stik-out-*")
 	if err != nil {
-		return fmt.Errorf("writing report: %w", err)
+		return fmt.Errorf("writing %s: %w", path, err)
 	}
 	defer os.Remove(tmp.Name())
-	if err := audit.WriteHTML(tmp, r); err != nil {
+	if err := render(tmp); err != nil {
 		tmp.Close()
-		return fmt.Errorf("writing report: %w", err)
+		return fmt.Errorf("writing %s: %w", path, err)
 	}
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("writing report: %w", err)
+		return fmt.Errorf("writing %s: %w", path, err)
 	}
 	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
-		return fmt.Errorf("writing report: %w", err)
+		return fmt.Errorf("writing %s: %w", path, err)
 	}
 	return os.Rename(tmp.Name(), path)
 }
