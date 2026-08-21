@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/adamsjack711-ux/stik-cli/internal/audit"
+	"github.com/adamsjack711-ux/stik-cli/internal/cve"
 	"github.com/adamsjack711-ux/stik-cli/internal/fingerprint"
 	"github.com/adamsjack711-ux/stik-cli/internal/model"
 	"github.com/adamsjack711-ux/stik-cli/internal/portscan"
@@ -115,6 +117,7 @@ func (a *app) auditPass(cfg auditConfig) (audit.Report, error) {
 	ctx, cancel := signalContext()
 	defer cancel()
 	started := time.Now()
+	var cveFindings []model.Finding
 
 	hosts, _, err := probe.DiscoverIn(ctx, auth, cand, probe.Options{Timeout: cfg.timeout})
 	if err != nil && !errors.Is(err, ctx.Err()) {
@@ -135,6 +138,14 @@ func (a *app) auditPass(cfg auditConfig) (audit.Report, error) {
 		hosts = fingerprint.Enrich(ctx, auth, hosts, fingerprint.Options{Timeout: cfg.timeout})
 	}
 
+	if cfg.cve {
+		findings, errs := a.enrichCVE(ctx, hosts)
+		for _, err := range errs {
+			fmt.Fprintln(a.err, "stik-net: cve: "+err.Error())
+		}
+		cveFindings = findings
+	}
+
 	report := audit.Report{
 		Version:   version,
 		Scope:     audit.ScopeInfo{Source: auth.Source(), Fingerprint: auth.Fingerprint(), Entries: auth.Entries()},
@@ -143,6 +154,10 @@ func (a *app) auditPass(cfg auditConfig) (audit.Report, error) {
 		Hosts:     hosts,
 		Findings:  audit.Evaluate(hosts),
 		Names:     deviceNames(reg),
+	}
+	if len(cveFindings) > 0 {
+		report.Findings = append(report.Findings, cveFindings...)
+		audit.Sort(report.Findings)
 	}
 	report.Graph = graphFor(report, reg, auth.Nets())
 	return report, nil
@@ -167,6 +182,23 @@ func (a *app) engineFor(name string, timeout time.Duration) (portscan.Scanner, s
 		return nil, resolved, nil
 	}
 	return scanner, resolved, nil
+}
+
+// enrichCVE is the only part of stik-net that contacts the internet, and it
+// runs only when --cve asks for it. The notice is printed, not logged quietly:
+// someone auditing a network they were lent should know that product and
+// version names are about to leave the building.
+func (a *app) enrichCVE(ctx context.Context, hosts []model.Host) ([]model.Finding, []error) {
+	cache := cve.Cache{Dir: filepath.Join(filepath.Dir(a.store.Path), "cve-cache")}
+	_ = cache.Prune()
+
+	enricher := &cve.Enricher{
+		Client: &cve.Client{APIKey: os.Getenv("NVD_API_KEY")},
+		Cache:  cache,
+		Notice: func(msg string) { fmt.Fprintf(a.out, "%s %s\n", a.style.Dim("cve:"), msg) },
+	}
+	results, errs := enricher.Enrich(ctx, hosts)
+	return cve.Findings(results), errs
 }
 
 // saveRun persists the finished report so `stik-net topo --from` can redraw it
@@ -226,6 +258,7 @@ type auditConfig struct {
 	engine      string
 	diff        bool
 	udpPorts    []int
+	cve         bool
 }
 
 func parseAuditFlags(args []string) (auditConfig, error) {
@@ -271,6 +304,8 @@ func parseAuditFlags(args []string) (auditConfig, error) {
 			full = true
 		case a == "--diff":
 			cfg.diff = true
+		case a == "--cve":
+			cfg.cve = true
 		case a == "--timeout" || strings.HasPrefix(a, "--timeout="):
 			v, err := valueOf(a, "--timeout", &i, args)
 			if err != nil {

@@ -267,6 +267,23 @@ UDP gets **three** states, because it has no handshake: `open` when something an
 
 Probes are the smallest well-formed request each protocol will answer, and every one is a read or a presence check. Ports 67/68 deliberately get a generic probe rather than a real DHCPDISCOVER — requesting a lease would take an address off your network, which is a change, not an observation.
 
+### CVE lookup (the one thing that phones home)
+
+Everything else in stik-net works on a network it doesn't trust: the OUI table is embedded rather than fetched, reports pull in no remote assets, and the passive watcher transmits nothing at all. `--cve` is the exception, so it's opt-in and tells you what it's doing:
+
+```
+$ stik-net audit --scope auth.txt --cve
+cve: looking up 3 identified service(s) at nvd.nist.gov. This sends product and
+     version names — not addresses, not host names — to NIST. Answers are cached
+     for a week.
+```
+
+Only services identified down to a product **and** a version get looked up, and only products in a small hand-checked CPE table — a wrong mapping doesn't produce no answer, it produces confident wrong answers about somebody else's software. Identical services across hosts are grouped into one query.
+
+Findings from a CVE match **cap at high, never critical**: matching on version alone is a lead to verify, since the host may already carry a distro backport. The finding says so.
+
+`NVD_API_KEY` raises the rate limit from 5 requests per 30s to 50.
+
 ### Scan engines
 
 `--engine connect` (the default) needs no privileges and works anywhere, but it completes the handshake, so the target's application logs will show it. `--engine syn` sends a bare SYN and never finishes the handshake — faster, and it leaves nothing in an application log — but it needs root:
