@@ -253,6 +253,20 @@ the map, with what moved
 
 The `--fail-on` gate counts **only findings that are new**, so a known issue can't fail your pipeline every night, and fixing something never looks like a regression.
 
+### UDP
+
+`--udp` adds a short UDP pass (`--udp-ports` to choose your own):
+
+```
+$ stik-net ports 192.168.1.0/24 --scope auth.txt --udp
+  161/udp  open       snmp     Linux router 5.15.0
+ 1900/udp  open|filt  ssdp
+```
+
+UDP gets **three** states, because it has no handshake: `open` when something answered, `closed` when the host sent ICMP unreachable, and `open|filtered` for silence — a service with nothing to say to our probe is indistinguishable from a dropped packet, and calling that "open" would be a guess presented as a result. No finding is ever raised from `open|filtered`.
+
+Probes are the smallest well-formed request each protocol will answer, and every one is a read or a presence check. Ports 67/68 deliberately get a generic probe rather than a real DHCPDISCOVER — requesting a lease would take an address off your network, which is a change, not an observation.
+
 ### Scan engines
 
 `--engine connect` (the default) needs no privileges and works anywhere, but it completes the handshake, so the target's application logs will show it. `--engine syn` sends a bare SYN and never finishes the handshake — faster, and it leaves nothing in an application log — but it needs root:

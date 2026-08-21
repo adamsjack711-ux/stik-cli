@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/adamsjack711-ux/stik-cli/internal/model"
@@ -236,5 +237,63 @@ func TestReportNameFallsBackToIP(t *testing.T) {
 	}
 	if got := r.Name("192.168.1.99"); got != "192.168.1.99" {
 		t.Errorf("Name = %q, want the bare IP", got)
+	}
+}
+
+func openUDP(port int, mut ...func(*model.Service)) model.Service {
+	s := model.Service{Port: port, Proto: "udp", State: model.StateOpen}
+	for _, m := range mut {
+		m(&s)
+	}
+	return s
+}
+
+func TestUDPExposureRules(t *testing.T) {
+	tests := []struct {
+		name string
+		svc  model.Service
+		id   string
+		sev  model.Severity
+	}{
+		{"snmp answered public", openUDP(161), "STIK-A050", model.SevHigh},
+		{"ipmi bmc", openUDP(623), "STIK-A051", model.SevHigh},
+		{"memcached over udp", openUDP(11211), "STIK-A052", model.SevHigh},
+		{"ssdp", openUDP(1900), "STIK-A053", model.SevMedium},
+		{"tftp", openUDP(69), "STIK-A054", model.SevMedium},
+		{"open resolver", openUDP(53), "STIK-A055", model.SevMedium},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Evaluate([]model.Host{hostWith("192.168.1.10", tc.svc)})
+			if len(got) != 1 || got[0].ID != tc.id || got[0].Severity != tc.sev {
+				t.Fatalf("findings = %v, want %s/%s", ids(got), tc.id, tc.sev)
+			}
+			if !strings.Contains(got[0].Evidence, "/udp") {
+				t.Errorf("evidence = %q, should name the protocol", got[0].Evidence)
+			}
+		})
+	}
+}
+
+func TestUDPAndTCPPortsAreDifferentServices(t *testing.T) {
+	// 11211 over TCP is the memcached TCP rule; over UDP it is the amplification
+	// rule. Firing both for one port would double-count and misdescribe.
+	udp := Evaluate([]model.Host{hostWith("192.168.1.10", openUDP(11211))})
+	if len(udp) != 1 || udp[0].ID != "STIK-A052" {
+		t.Errorf("udp findings = %v, want only the UDP rule", ids(udp))
+	}
+	tcp := Evaluate([]model.Host{hostWith("192.168.1.10", open(11211))})
+	if len(tcp) != 1 || tcp[0].ID != "STIK-A008" {
+		t.Errorf("tcp findings = %v, want only the TCP rule", ids(tcp))
+	}
+}
+
+func TestOpenFilteredUDPDoesNotFireRules(t *testing.T) {
+	// open|filtered means we do not know whether anything is there. A finding
+	// built on that would be a guess presented as an observation.
+	svc := openUDP(161)
+	svc.State = model.StateOpenFiltered
+	if got := Evaluate([]model.Host{hostWith("192.168.1.10", svc)}); len(got) != 0 {
+		t.Errorf("open|filtered produced findings: %v", ids(got))
 	}
 }

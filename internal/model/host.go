@@ -22,16 +22,22 @@ type Host struct {
 type PortState string
 
 const (
-	StateOpen     PortState = "open"     // handshake completed
-	StateClosed   PortState = "closed"   // actively refused (RST)
+	StateOpen     PortState = "open"     // handshake completed, or a UDP service replied
+	StateClosed   PortState = "closed"   // actively refused (TCP RST, or ICMP port unreachable)
 	StateFiltered PortState = "filtered" // no response before timeout
+
+	// StateOpenFiltered is UDP's honest answer to silence. A UDP service that
+	// has nothing to say to our probe looks exactly like a dropped packet, and
+	// there is no way to tell them apart from outside. Reporting either "open"
+	// or "filtered" here would be a guess dressed as a result.
+	StateOpenFiltered PortState = "open|filtered"
 )
 
 // Service is one port's result. M2 records reachability (Port/State/Name);
 // the M3 fingerprint pass fills Product/Version/Banner/TLS from the wire.
 type Service struct {
 	Port    int       `json:"port"`
-	Proto   string    `json:"proto"` // "tcp"
+	Proto   string    `json:"proto"` // "tcp" or "udp"
 	State   PortState `json:"state"`
 	Name    string    `json:"name,omitempty"`    // well-known name, e.g. "https"
 	Product string    `json:"product,omitempty"` // e.g. "OpenSSH", "nginx"

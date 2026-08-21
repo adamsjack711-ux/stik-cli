@@ -129,6 +129,7 @@ func (a *app) auditPass(cfg auditConfig) (audit.Report, error) {
 			Timeout:     cfg.timeout,
 			Concurrency: cfg.concurrency,
 			Engine:      engine,
+			UDPPorts:    cfg.udpPorts,
 		})
 		fmt.Fprintf(a.out, "%s %d open port(s) (%s engine)\n", a.style.Dim("scanned"), stats.Open, engineName)
 		hosts = fingerprint.Enrich(ctx, auth, hosts, fingerprint.Options{Timeout: cfg.timeout})
@@ -224,6 +225,7 @@ type auditConfig struct {
 	failOn      model.Severity
 	engine      string
 	diff        bool
+	udpPorts    []int
 }
 
 func parseAuditFlags(args []string) (auditConfig, error) {
@@ -289,6 +291,18 @@ func parseAuditFlags(args []string) (auditConfig, error) {
 				return cfg, fmt.Errorf("--concurrency: want a positive integer, got %q", v)
 			}
 			cfg.concurrency = n
+		case a == "--udp":
+			cfg.udpPorts = portscan.DefaultUDPPorts
+		case a == "--udp-ports" || strings.HasPrefix(a, "--udp-ports="):
+			v, err := valueOf(a, "--udp-ports", &i, args)
+			if err != nil {
+				return cfg, err
+			}
+			ports, err := parsePorts(v)
+			if err != nil {
+				return cfg, err
+			}
+			cfg.udpPorts = ports
 		case a == "--engine" || strings.HasPrefix(a, "--engine="):
 			v, err := valueOf(a, "--engine", &i, args)
 			if err != nil {

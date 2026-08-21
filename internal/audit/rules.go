@@ -72,6 +72,21 @@ var staleProducts = map[string]string{
 	"ProFTPD": "1.3.8",
 }
 
+// udpExposed are UDP services whose mere reachability is the problem: each one
+// is either an amplification source, a management plane, or an information
+// leak, and none of them belongs on a network anyone else can reach.
+var udpExposed = map[int]struct {
+	id, name, why, fix string
+	sev                model.Severity
+}{
+	161:   {"STIK-A050", "SNMP", "An SNMP agent answered the default community string \"public\", so anyone who can reach this port can read the device's configuration and inventory.", "Change or disable the public community, and restrict UDP 161 to a management range.", model.SevHigh},
+	623:   {"STIK-A051", "IPMI", "A BMC answered on the IPMI port. Baseboard controllers run beneath the operating system and have a long history of authentication bypasses.", "Put the BMC on an isolated management network; never expose it to a general LAN.", model.SevHigh},
+	11211: {"STIK-A052", "memcached", "memcached answered over UDP. It has no authentication and is the classic reflection-amplification source.", "Disable the UDP listener (-U 0) and bind memcached to localhost.", model.SevHigh},
+	1900:  {"STIK-A053", "SSDP/UPnP", "UPnP discovery answered. SSDP is an amplification source and often fronts a device that will open ports on its own initiative.", "Disable UPnP on the router unless something needs it.", model.SevMedium},
+	69:    {"STIK-A054", "TFTP", "TFTP answered. It has no authentication of any kind, and is usually left over from a provisioning process.", "Disable TFTP once provisioning is done.", model.SevMedium},
+	53:    {"STIK-A055", "DNS", "A DNS resolver answered a recursive query. An open resolver is used for amplification attacks against other people.", "Restrict recursion to your own networks.", model.SevMedium},
+}
+
 // Rules is the v1 ruleset, evaluated against every open service.
 var Rules = buildRules()
 
@@ -87,7 +102,26 @@ func buildRules() []Rule {
 			Detail:   spec.why,
 			Fix:      spec.fix,
 			Match: func(s model.Service) (string, bool) {
-				if s.Port != port {
+				if s.Proto == "udp" || s.Port != port {
+					return "", false
+				}
+				return describe(s), true
+			},
+		})
+	}
+
+	for port, spec := range udpExposed {
+		port, spec := port, spec
+		rules = append(rules, Rule{
+			ID:       spec.id,
+			Title:    spec.name + " answered over UDP",
+			Severity: spec.sev,
+			Detail:   spec.why,
+			Fix:      spec.fix,
+			Match: func(s model.Service) (string, bool) {
+				// UDP only: the same port number over TCP is a different service
+				// with different consequences.
+				if s.Proto != "udp" || s.Port != port {
 					return "", false
 				}
 				return describe(s), true
@@ -104,7 +138,7 @@ func buildRules() []Rule {
 			Detail:   spec.why,
 			Fix:      spec.fix,
 			Match: func(s model.Service) (string, bool) {
-				if s.Port != port || s.TLS != nil {
+				if s.Proto == "udp" || s.Port != port || s.TLS != nil {
 					return "", false
 				}
 				return describe(s), true
@@ -217,15 +251,19 @@ func buildRules() []Rule {
 // describe is the standard evidence line for a port-based rule: whatever the
 // fingerprint pass managed to learn, or the bare port when it learned nothing.
 func describe(s model.Service) string {
+	proto := s.Proto
+	if proto == "" {
+		proto = "tcp"
+	}
 	switch {
 	case s.Product != "" && s.Version != "":
-		return fmt.Sprintf("%d/tcp open — %s %s", s.Port, s.Product, s.Version)
+		return fmt.Sprintf("%d/%s open — %s %s", s.Port, proto, s.Product, s.Version)
 	case s.Product != "":
-		return fmt.Sprintf("%d/tcp open — %s", s.Port, s.Product)
+		return fmt.Sprintf("%d/%s open — %s", s.Port, proto, s.Product)
 	case s.Banner != "":
-		return fmt.Sprintf("%d/tcp open — %s", s.Port, s.Banner)
+		return fmt.Sprintf("%d/%s open — %s", s.Port, proto, s.Banner)
 	}
-	return fmt.Sprintf("%d/tcp open", s.Port)
+	return fmt.Sprintf("%d/%s open", s.Port, proto)
 }
 
 func certEvidence(t *model.TLSInfo) string {
