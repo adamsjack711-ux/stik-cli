@@ -161,8 +161,21 @@ Behind one `Scanner` interface so `audit` doesn't care which is active.
 - **Coverage limit, stated plainly.** Packet construction, flag classification,
   the BPF filter, silence-means-filtered, and every branch of the engine
   fallback are unit-tested. The live scan needs root, so it is a test that skips
-  unless `os.Geteuid() == 0` — unprivileged CI never runs it. The design's
-  "dropped-SYN harness" for filtered is still not built.
+  unless `os.Geteuid() == 0` — unprivileged CI never runs it.
+- **The dropped-SYN harness (§10) now exists.** The obvious way to arrange a
+  filtered port is a firewall rule, which means mutating the firewall of
+  whatever machine runs the tests and restoring it correctly afterwards —
+  including when a test panics. Instead the harness saturates a listening
+  socket's accept queue: past the backlog the kernel drops SYNs on the floor.
+  No SYN/ACK, no RST, and the host is unquestionably alive — which is the part
+  the black-hole test cannot show, since an address that routes nowhere is a
+  different situation from a host that answers on one port and drops another.
+  Nothing is mutated, so there is nothing to restore.
+  The harness **verifies its own premise** before asserting: queue behaviour
+  differs between kernels, so if this machine refuses or accepts instead of
+  dropping, the test skips and says which — a test that cannot fail is worse
+  than no test. The connect half runs unprivileged, so filtered is finally
+  covered in CI; the SYN half is root-gated like its siblings.
 
 Interface:
 ```go
@@ -313,6 +326,8 @@ Follow the existing discipline (real serialized fixtures, not mocks):
 - `probe` — table tests against a loopback listener matrix (open/closed/filtered).
 - `portscan` — spin up N `net.Listen` sockets, assert exact open-set; a
   deliberately filtered port via a dropped-SYN harness for the SYN engine.
+  (Shipped: the harness fills a listen backlog rather than touching a firewall,
+  and skips rather than passing if a kernel does not drop past a full queue.)
 - `scope` — the security-critical unit: exhaustive in/out-of-scope matching,
   CIDR edges, "resolved target outside scope is dropped" must have a test.
 - `audit` rules — feed synthetic `[]Host` fixtures, assert exact `[]Finding`.
