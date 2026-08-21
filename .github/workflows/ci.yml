@@ -34,5 +34,12 @@ jobs:
       - name: Test
         run: go test -race ./...
 
+      # The filtered-state harness skips itself when a kernel does not drop past
+      # a full accept queue, and a plain `go test` hides that. Run it verbosely
+      # so the log says whether this platform actually exercised the scenario —
+      # a skip that looks like a pass is how coverage quietly disappears.
+      - name: Filtered-state harness (report skip vs run)
+        run: go test -run DroppedSYN -v ./internal/portscan/
+
       - name: Build
         run: go build -o stik-net ./cmd/stik-net
