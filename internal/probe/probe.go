@@ -188,6 +188,14 @@ func enumerate(sc *scope.Set, max int) ([]net.IP, error) {
 			}
 			out = append(out, cloneIP(ip))
 			if len(out) > max {
+				if !isV4 {
+					// A /64 holds 18 quintillion addresses. Raising --max-hosts
+					// does not help, and saying so is more useful than repeating
+					// the v4 advice at someone.
+					return nil, fmt.Errorf(
+						"%s is too large to sweep — IPv6 ranges cannot be enumerated, "+
+							"so list the addresses you want probed in the scope file instead", n.String())
+				}
 				return nil, fmt.Errorf("scope enumerates more than %d hosts; narrow it or raise --max-hosts", max)
 			}
 		}

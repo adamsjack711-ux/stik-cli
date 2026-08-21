@@ -2,7 +2,6 @@ package portscan
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -66,10 +65,10 @@ func (s *SYNScanner) Scan(ctx context.Context, host string, ports []int) ([]mode
 	if dst == nil {
 		return nil, fmt.Errorf("syn scan: %q is not an IP address", host)
 	}
-	if dst.To4() == nil {
-		return nil, errors.New("syn scan: IPv4 only for now — use --engine connect for IPv6")
+	v6 := dst.To4() == nil
+	if !v6 {
+		dst = dst.To4()
 	}
-	dst = dst.To4()
 
 	src, iface, err := routeTo(dst, s.Iface)
 	if err != nil {
@@ -92,11 +91,11 @@ func (s *SYNScanner) Scan(ctx context.Context, host string, ports []int) ([]mode
 	defer handle.Close()
 
 	sport := ephemeralPort()
-	if err := handle.SetBPFFilter(bpfReplyFilter(dst, sport)); err != nil {
+	if err := handle.SetBPFFilter(bpfReplyFilter(dst, sport, v6)); err != nil {
 		return nil, fmt.Errorf("syn scan: %w", err)
 	}
 
-	sender, err := net.ListenPacket("ip4:tcp", src.String())
+	sender, err := net.ListenPacket(rawNetwork(v6), src.String())
 	if err != nil {
 		return nil, fmt.Errorf("syn scan: raw socket: %w", err)
 	}
@@ -123,7 +122,7 @@ func (s *SYNScanner) Scan(ctx context.Context, host string, ports []int) ([]mode
 				wg.Wait()
 				return tracker.services(), err
 			}
-			if err := sendSYN(sender, src, dst, sport, uint16(port)); err != nil {
+			if err := sendSYN(sender, src, dst, sport, uint16(port), v6); err != nil {
 				tracker.fail(port, err)
 			}
 			if s.Rate > 0 {
@@ -181,16 +180,31 @@ func classifyTCP(tcp *layers.TCP) model.PortState {
 	}
 }
 
+// rawNetwork picks the raw socket family. The kernel writes the IP header for
+// us in both cases, which is what spares us ARP on v4 and neighbour discovery
+// on v6.
+func rawNetwork(v6 bool) string {
+	if v6 {
+		return "ip6:tcp"
+	}
+	return "ip4:tcp"
+}
+
 // bpfReplyFilter admits only replies to this scan: from the target we asked,
-// to the ephemeral port we asked from.
-func bpfReplyFilter(dst net.IP, sport uint16) string {
-	return fmt.Sprintf("tcp and src host %s and dst port %d", dst.String(), sport)
+// to the ephemeral port we asked from. The family is stated explicitly so a
+// v4-mapped form of the same address cannot slip through the v6 filter.
+func bpfReplyFilter(dst net.IP, sport uint16, v6 bool) string {
+	family := "ip"
+	if v6 {
+		family = "ip6"
+	}
+	return fmt.Sprintf("%s and tcp and src host %s and dst port %d", family, dst.String(), sport)
 }
 
 // sendSYN writes one SYN. The kernel supplies the IP header; we supply a TCP
 // segment whose checksum is computed over the pseudo-header for this pair.
-func sendSYN(conn net.PacketConn, src, dst net.IP, sport, dport uint16) error {
-	payload, err := buildSYN(src, dst, sport, dport)
+func sendSYN(conn net.PacketConn, src, dst net.IP, sport, dport uint16, v6 bool) error {
+	payload, err := buildSYN(src, dst, sport, dport, v6)
 	if err != nil {
 		return err
 	}
@@ -198,12 +212,24 @@ func sendSYN(conn net.PacketConn, src, dst net.IP, sport, dport uint16) error {
 	return err
 }
 
-// buildSYN serializes the TCP segment for one probe.
-func buildSYN(src, dst net.IP, sport, dport uint16) ([]byte, error) {
-	ip := &layers.IPv4{
-		Version: 4, TTL: 64,
-		SrcIP: src, DstIP: dst,
-		Protocol: layers.IPProtocolTCP,
+// buildSYN serializes the TCP segment for one probe. The IP layer is built only
+// to compute the checksum: TCP's checksum covers a pseudo-header of the
+// addresses, and IPv6's pseudo-header differs from IPv4's, so a v6 probe
+// checksummed as v4 would be dropped by the target as corrupt.
+func buildSYN(src, dst net.IP, sport, dport uint16, v6 bool) ([]byte, error) {
+	var network gopacket.NetworkLayer
+	if v6 {
+		network = &layers.IPv6{
+			Version: 6, HopLimit: 64,
+			SrcIP: src, DstIP: dst,
+			NextHeader: layers.IPProtocolTCP,
+		}
+	} else {
+		network = &layers.IPv4{
+			Version: 4, TTL: 64,
+			SrcIP: src, DstIP: dst,
+			Protocol: layers.IPProtocolTCP,
+		}
 	}
 	tcp := &layers.TCP{
 		SrcPort: layers.TCPPort(sport),
@@ -212,7 +238,7 @@ func buildSYN(src, dst net.IP, sport, dport uint16) ([]byte, error) {
 		Seq:     rand.Uint32(),
 		Window:  synWindow,
 	}
-	if err := tcp.SetNetworkLayerForChecksum(ip); err != nil {
+	if err := tcp.SetNetworkLayerForChecksum(network); err != nil {
 		return nil, fmt.Errorf("syn scan: %w", err)
 	}
 	buf := gopacket.NewSerializeBuffer()

@@ -12,6 +12,7 @@ const (
 	SourceARP  Source = "arp"
 	SourceMDNS Source = "mdns"
 	SourceDHCP Source = "dhcp"
+	SourceNDP  Source = "ndp" // IPv6 neighbour/router discovery
 )
 
 // Observation is a single fact learned from one broadcast/multicast packet.
@@ -19,11 +20,13 @@ const (
 // successive observations of the same MAC into one Device.
 type Observation struct {
 	MAC             string // normalized "aa:bb:cc:dd:ee:ff"
-	IP              string // "" if this packet did not reveal one
+	IP              string // IPv4; "" if this packet did not reveal one
+	IPv6            string // IPv6; "" if this packet did not reveal one
 	Hostname        string // "" unless mDNS/DHCP announced a name
 	DHCPFingerprint string // DHCP requested-option codes in order, "" if none
 	DHCPVendorClass string // DHCP option 60, e.g. "android-dhcp-14"; "" if none
 	DHCPServer      bool   // this packet was a DHCP OFFER/ACK — MAC is a server handing out leases
+	Router          bool   // this packet was an IPv6 Router Advertisement
 	Source          Source
 }
 
@@ -43,10 +46,12 @@ type Device struct {
 	Vendor          string    `json:"vendor,omitempty"`
 	Hostname        string    `json:"hostname,omitempty"`
 	IP              string    `json:"ip,omitempty"`
+	IPv6            string    `json:"ipv6,omitempty"`
 	DHCPFingerprint string    `json:"dhcp_fingerprint,omitempty"`
 	DHCPVendorClass string    `json:"dhcp_vendor_class,omitempty"`
 	Private         bool      `json:"private,omitempty"`     // randomized MAC
 	DHCPServer      bool      `json:"dhcp_server,omitempty"` // seen handing out DHCP leases
+	Router          bool      `json:"router,omitempty"`      // seen advertising itself as an IPv6 router
 	Known           bool      `json:"known"`                 // reviewed & accepted into the baseline
 	FirstSeen       time.Time `json:"first_seen"`
 	LastSeen        time.Time `json:"last_seen"`

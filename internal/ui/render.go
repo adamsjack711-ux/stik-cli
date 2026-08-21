@@ -90,6 +90,12 @@ func verboseLine(d *model.Device) string {
 	if d.IP != "" {
 		parts = append(parts, "ip "+d.IP)
 	}
+	if d.IPv6 != "" {
+		parts = append(parts, "ipv6 "+d.IPv6)
+	}
+	if d.Router {
+		parts = append(parts, "advertises itself as an IPv6 router")
+	}
 	if d.Private {
 		parts = append(parts, "private/randomized address")
 	} else if d.Vendor != "" {

@@ -284,6 +284,19 @@ Findings from a CVE match **cap at high, never critical**: matching on version a
 
 `NVD_API_KEY` raises the rate limit from 5 requests per 30s to 50.
 
+### IPv6
+
+The watcher reads NDP alongside ARP, so IPv6 devices are named the same way IPv4 ones are, and a router advertising itself is recorded as a router. `stik-net devices --verbose` shows both addresses.
+
+For the auditor, `--engine syn` and `--engine connect` both speak IPv6 — but an IPv6 range **cannot be swept**. A /64 holds 18 quintillion addresses, so raising `--max-hosts` is not the answer and stik-net says so rather than repeating the IPv4 advice:
+
+```
+2001:db8::/64 is too large to sweep — IPv6 ranges cannot be enumerated,
+so list the addresses you want probed in the scope file instead
+```
+
+List the individual addresses in the scope file and they are probed normally.
+
 ### Scan engines
 
 `--engine connect` (the default) needs no privileges and works anywhere, but it completes the handshake, so the target's application logs will show it. `--engine syn` sends a bare SYN and never finishes the handshake — faster, and it leaves nothing in an application log — but it needs root:
@@ -325,7 +338,7 @@ stik is deliberately narrow, and says so up front:
 
 - **The watcher is passive.** `stik-net`, `devices`, `watch`, `daemon` and `service` only *listen* — they never transmit. No ARP scanning, no ARP spoofing, no port scanning. That has not changed.
 - **The auditor is active, and never runs by accident.** `discover`, `ports` and `audit` do send packets, so they exist as separate commands that refuse to start without a `--scope` file naming what you are authorized to touch. Nothing outside that file is probed. If you never run those three, stik-net transmits nothing.
-- **Broadcast/multicast only.** On a switched network you physically cannot see other devices' unicast traffic — the switch doesn't forward it to your port. stik reads only the protocols every device on the LAN legitimately broadcasts: **ARP**, **mDNS** (5353), and **DHCP** (67/68).
+- **Broadcast/multicast only.** On a switched network you physically cannot see other devices' unicast traffic — the switch doesn't forward it to your port. stik reads only the protocols every device on the LAN legitimately broadcasts or multicasts: **ARP**, **NDP** (IPv6 neighbour and router discovery), **mDNS** (5353), and **DHCP** (67/68).
 - **For networks you own.** Point it at your own home or lab network.
 
 That narrowness is the honest shape of the problem, not a limitation stik is hiding. See [Design notes](#design-notes) for why.
@@ -337,6 +350,7 @@ That narrowness is the honest shape of the problem, not a limitation stik is hid
 Three broadcast protocols, combined into one sentence:
 
 - **ARP** → the MAC↔IP pairing. The ground truth of who's on the wire.
+- **NDP** → the same thing for IPv6. Neighbour advertisements carry "this address is mine, at this MAC"; router advertisements say which box is routing the network.
 - **mDNS** → hostnames. Apple and many IoT devices announce themselves constantly (`Dylans-iPhone.local`) — free, high-quality identity.
 - **DHCP** → the *set and order* of requested options is a fingerprint that often reveals the OS even when nothing else does, plus a vendor-class string like `android-dhcp-14`.
 - **OUI** → the first three bytes of the MAC map to a manufacturer, via the **embedded IEEE registry** (no network fetch — stik works on a network it doesn't trust).

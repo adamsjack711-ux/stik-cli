@@ -72,6 +72,9 @@ func (r *Registry) Observe(obs model.Observation, now time.Time) (*model.Device,
 	if obs.IP != "" {
 		dev.IP = obs.IP
 	}
+	if obs.IPv6 != "" {
+		dev.IPv6 = obs.IPv6
+	}
 	if obs.Hostname != "" {
 		dev.Hostname = obs.Hostname
 	}
@@ -83,6 +86,9 @@ func (r *Registry) Observe(obs model.Observation, now time.Time) (*model.Device,
 	}
 	if obs.DHCPServer {
 		dev.DHCPServer = true
+	}
+	if obs.Router {
+		dev.Router = true
 	}
 
 	id := identify.Identify(identify.Input{

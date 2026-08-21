@@ -4,6 +4,7 @@ Status: draft for review · 2026-08-21
 Progress: M1 (scope + discover) ✅ · M2 (connect ports) ✅ · M3 (fingerprint) ✅ ·
 M4 (audit + report) ✅ · M5 (topology) ✅ · M6 (SYN engine) ✅ ·
 M7 re-audit diff ✅ · topo diff ✅ · UDP ✅ · --cve ✅ — M1–M7 complete
+IPv6/NDP ✅ (post-M7)
 Author: Jack Adams-Lovell
 
 ## 1. Goal & non-goals

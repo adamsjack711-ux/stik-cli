@@ -14,11 +14,17 @@ import (
 	"github.com/gopacket/gopacket/pcap"
 )
 
-// The only traffic stik is allowed to see: ARP, mDNS (5353), DHCP (67/68).
-// Every one of these is broadcast or multicast — traffic any host on the LAN
-// legitimately receives. Unicast between other devices is invisible to us on a
-// switched network, by design and by physics.
-const bpfFilter = "arp or (udp port 5353) or (udp port 67) or (udp port 68)"
+// The only traffic stik is allowed to see: ARP, NDP (IPv6 neighbour and router
+// discovery), mDNS (5353) and DHCP (67/68). Every one of these is broadcast or
+// multicast — traffic any host on the LAN legitimately receives. Unicast
+// between other devices is invisible to us on a switched network, by design and
+// by physics.
+//
+// NDP is filtered down to the three message types stik reads rather than all of
+// ICMPv6: echo requests and error messages are unicast conversations between
+// other people, and there is no reason to have them in the buffer.
+const bpfFilter = "arp or (udp port 5353) or (udp port 67) or (udp port 68) or " +
+	"(icmp6 and (ip6[40] = 134 or ip6[40] = 135 or ip6[40] = 136))"
 
 const snapLen = 1600 // these packets are small; full frames fit comfortably
 

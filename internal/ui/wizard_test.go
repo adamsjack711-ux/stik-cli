@@ -87,3 +87,22 @@ func TestWizardStopsOnEOF(t *testing.T) {
 		t.Errorf("Named = %d, want 1 before EOF", res.Named)
 	}
 }
+
+func TestVerboseLineShowsIPv6AndRouterRole(t *testing.T) {
+	line := verboseLine(&model.Device{
+		MAC: "aa:bb:cc:dd:ee:01", IP: "192.168.1.20", IPv6: "2001:db8::20",
+		Vendor: "Synology", Router: true,
+	})
+	for _, want := range []string{"ip 192.168.1.20", "ipv6 2001:db8::20", "IPv6 router"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("verbose line missing %q: %s", want, line)
+		}
+	}
+}
+
+func TestVerboseLineOmitsIPv6WhenUnknown(t *testing.T) {
+	line := verboseLine(&model.Device{MAC: "aa:bb:cc:dd:ee:02", IP: "192.168.1.21"})
+	if strings.Contains(line, "ipv6") {
+		t.Errorf("a device with no IPv6 should not mention one: %s", line)
+	}
+}

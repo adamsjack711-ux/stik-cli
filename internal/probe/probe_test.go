@@ -147,3 +147,34 @@ func TestDiscoverInNarrowsToAuth(t *testing.T) {
 		t.Fatalf("target outside authorized scope must not be probed, got %+v", hosts)
 	}
 }
+
+func TestIPv6RangeSaysEnumerationIsImpossible(t *testing.T) {
+	// Raising --max-hosts does not make a /64 sweepable, so repeating that advice
+	// would send someone down a dead end.
+	sc := scopeOf(t, "2001:db8::/64")
+	_, err := enumerate(sc, 128)
+	if err == nil {
+		t.Fatal("want an error for a /64")
+	}
+	if !strings.Contains(err.Error(), "cannot be enumerated") {
+		t.Errorf("error should explain why, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "--max-hosts") {
+		t.Errorf("error should not suggest a flag that cannot help: %v", err)
+	}
+}
+
+func TestExplicitIPv6AddressesAreStillProbed(t *testing.T) {
+	// Listing addresses is the supported IPv6 path, so it has to work.
+	sc := scopeOf(t, "2001:db8::20/128\n2001:db8::21/128")
+	got, err := enumerate(sc, 128)
+	if err != nil {
+		t.Fatalf("enumerate: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("enumerated %d addresses, want both", len(got))
+	}
+	if got[0].String() != "2001:db8::20" || got[1].String() != "2001:db8::21" {
+		t.Errorf("got %v", got)
+	}
+}
