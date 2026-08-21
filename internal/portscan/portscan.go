@@ -30,6 +30,14 @@ type Options struct {
 	Ports       []int         // ports to probe; defaults to DefaultTopPorts
 	Timeout     time.Duration // per-connection timeout; default 700ms
 	Concurrency int           // parallel probes across all host:port pairs; default 256
+
+	// Engine, when set, scans a whole host at a time instead of fanning out
+	// host:port pairs. The SYN engine needs that shape — it holds one capture
+	// handle and one source port per host — while the connect engine is faster
+	// with the flat fan-out below, so both paths exist deliberately.
+	Engine Scanner
+	// HostConcurrency bounds how many hosts an Engine scans at once; default 8.
+	HostConcurrency int
 }
 
 func (o Options) withDefaults() Options {
@@ -41,6 +49,9 @@ func (o Options) withDefaults() Options {
 	}
 	if o.Concurrency == 0 {
 		o.Concurrency = 256
+	}
+	if o.HostConcurrency == 0 {
+		o.HostConcurrency = 8
 	}
 	return o
 }
@@ -82,6 +93,10 @@ func (s ConnectScanner) Scan(ctx context.Context, host string, ports []int) ([]m
 func ScanHosts(ctx context.Context, sc *scope.Set, hosts []model.Host, opts Options) ([]model.Host, Stats) {
 	opts = opts.withDefaults()
 	start := time.Now()
+
+	if opts.Engine != nil {
+		return scanWithEngine(ctx, sc, hosts, opts, start)
+	}
 
 	type job struct {
 		hi   int
@@ -165,4 +180,55 @@ func probePort(ctx context.Context, host string, port int, timeout time.Duration
 		svc.State = model.StateFiltered
 	}
 	return svc
+}
+
+// scanWithEngine drives a per-host Scanner (the SYN engine) over the in-scope
+// hosts, bounded by HostConcurrency. The scope is checked here exactly as it is
+// on the connect path: an engine never sees an address the scope rejected.
+func scanWithEngine(ctx context.Context, sc *scope.Set, hosts []model.Host, opts Options, start time.Time) ([]model.Host, Stats) {
+	open := make([][]model.Service, len(hosts))
+	sem := make(chan struct{}, opts.HostConcurrency)
+	var wg sync.WaitGroup
+
+	for hi := range hosts {
+		if !sc.Contains(net.ParseIP(hosts[hi].IP)) { // gate
+			continue
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		wg.Add(1)
+		go func(hi int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			svcs, err := opts.Engine.Scan(ctx, hosts[hi].IP, opts.Ports)
+			if err != nil && len(svcs) == 0 {
+				return
+			}
+			for _, svc := range svcs {
+				if svc.State == model.StateOpen {
+					open[hi] = append(open[hi], svc)
+				}
+			}
+		}(hi)
+	}
+	wg.Wait()
+
+	result := make([]model.Host, len(hosts))
+	copy(result, hosts)
+	totalOpen := 0
+	for hi := range result {
+		svcs := open[hi]
+		sort.Slice(svcs, func(a, b int) bool { return svcs[a].Port < svcs[b].Port })
+		result[hi].Services = svcs
+		totalOpen += len(svcs)
+	}
+	return result, Stats{
+		Hosts:   len(hosts),
+		Ports:   len(opts.Ports),
+		Open:    totalOpen,
+		Elapsed: time.Since(start),
+	}
 }

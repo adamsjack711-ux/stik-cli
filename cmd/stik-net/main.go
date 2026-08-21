@@ -147,6 +147,8 @@ Flags:
                       ntfy://[server/]topic   push to an ntfy topic
                       https://…               POST the event as JSON to a webhook
                     Or set STIK_NOTIFY=target1,target2 in the environment.
+  --engine <name>   ports/audit: connect (default, unprivileged), syn (half-open,
+                    needs sudo), or auto. A fallback to connect is always reported.
   --no-fingerprint  ports: list open ports only; don't identify the services
   --out <file>      audit/topo: also write the self-contained HTML report/map here
   --from <run>      topo: redraw a saved run ("last", or a path) without scanning

@@ -217,6 +217,18 @@ HIGH  SMB reachable on the network
 
 `--out report.html` also writes a self-contained HTML report — no scripts, no external stylesheets, nothing fetched when it opens — suitable for handing to someone else.
 
+### Scan engines
+
+`--engine connect` (the default) needs no privileges and works anywhere, but it completes the handshake, so the target's application logs will show it. `--engine syn` sends a bare SYN and never finishes the handshake — faster, and it leaves nothing in an application log — but it needs root:
+
+```bash
+sudo stik-net audit --scope auth.txt --engine syn
+```
+
+`--engine auto` uses SYN where it can. **A fallback to connect is always printed, never silent** — the two engines leave different traces on the target, so being wrong about which one ran means being wrong about what the target recorded.
+
+The SYN engine also makes `filtered` mean something: on a connect scan it is "a dial error we couldn't interpret", while here it is an observation — the SYN went out, a retransmit followed, and nothing came back.
+
 Exit codes make it usable as a CI gate: **0** clean, **1** when a finding reaches `--fail-on` (default `high`), **2** when the run itself failed.
 
 ### The map

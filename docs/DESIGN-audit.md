@@ -2,7 +2,8 @@
 
 Status: draft for review · 2026-08-21
 Progress: M1 (scope + discover) ✅ · M2 (connect ports) ✅ · M3 (fingerprint) ✅ ·
-M4 (audit + report) ✅ · M5 (topology) ✅ · M6 (SYN engine) next
+M4 (audit + report) ✅ · M5 (topology) ✅ · M6 (SYN engine) ✅ · M7 (--cve, UDP,
+re-audit diff) next
 Author: Jack Adams-Lovell
 
 ## 1. Goal & non-goals
@@ -134,6 +135,34 @@ Behind one `Scanner` interface so `audit` doesn't care which is active.
 - **v2 — SYN scan.** Raw packets via gopacket (already a dependency). Faster,
   half-open, stealthier. Needs root / `CAP_NET_RAW`. Auto-fall-back to connect
   when we lack privileges, with a logged notice — never silently.
+
+**How M6 built it:**
+
+- **Send and receive use different mechanisms, deliberately.** SYNs go out on an
+  `ip4:tcp` raw socket, so the kernel writes the IP header and we skip ARP and
+  L2 entirely. Replies come back through pcap with a tight BPF filter, because
+  BSD-derived kernels (macOS included) never deliver TCP to a raw socket. One
+  mechanism would have been neater; two is what actually works on both targets.
+- **The kernel sends the RST.** The SYN/ACK arrives at a port no socket is bound
+  to, so the host's own stack tears the half-open connection down. That is how
+  every SYN scanner behaves, and it is worth stating rather than discovering.
+- **`filtered` finally means something.** On the connect engine, filtered is
+  "a dial error we couldn't interpret". Here it is an observation: the SYN went
+  out, one retransmit followed, and nothing came back.
+- **Engine choice is a value, not a side effect.** `EngineChoice` resolves a
+  name into a Scanner and reports what it settled on, so the fallback to connect
+  can be printed, tested, and reasoned about. The engines leave different traces
+  on the target — an operator who thinks they ran half-open when they didn't has
+  been misled about what the target logged.
+- **`ScanHosts` grew a second shape.** The connect engine keeps the flat
+  host:port fan-out it is fastest with; the SYN engine gets a per-host path,
+  because it holds one capture handle and one source port per target. The scope
+  gate is applied identically on both paths.
+- **Coverage limit, stated plainly.** Packet construction, flag classification,
+  the BPF filter, silence-means-filtered, and every branch of the engine
+  fallback are unit-tested. The live scan needs root, so it is a test that skips
+  unless `os.Geteuid() == 0` — unprivileged CI never runs it. The design's
+  "dropped-SYN harness" for filtered is still not built.
 
 Interface:
 ```go
