@@ -80,6 +80,13 @@ func (a *app) auditPass(cfg auditConfig) (audit.Report, error) {
 		cfg.ports = portscan.DefaultTopPorts
 	}
 
+	// Resolve the engine first: an unusable --engine must fail before the first
+	// packet, and a fallback to connect must be visible from the start.
+	engine, engineName, err := a.engineFor(cfg.engine, cfg.timeout)
+	if err != nil {
+		return audit.Report{}, err
+	}
+
 	auth, err := scope.Load(cfg.scopePath)
 	if err != nil {
 		return audit.Report{}, err
@@ -118,8 +125,9 @@ func (a *app) auditPass(cfg auditConfig) (audit.Report, error) {
 			Ports:       cfg.ports,
 			Timeout:     cfg.timeout,
 			Concurrency: cfg.concurrency,
+			Engine:      engine,
 		})
-		fmt.Fprintf(a.out, "%s %d open port(s)\n", a.style.Dim("scanned"), stats.Open)
+		fmt.Fprintf(a.out, "%s %d open port(s) (%s engine)\n", a.style.Dim("scanned"), stats.Open, engineName)
 		hosts = fingerprint.Enrich(ctx, auth, hosts, fingerprint.Options{Timeout: cfg.timeout})
 	}
 
@@ -134,6 +142,27 @@ func (a *app) auditPass(cfg auditConfig) (audit.Report, error) {
 	}
 	report.Graph = graphFor(report, reg, auth.Nets())
 	return report, nil
+}
+
+// engineFor resolves --engine into a scanner. A fallback from SYN to connect is
+// printed, never swallowed: the two engines leave different traces on the
+// target, so the operator has to know which one actually ran.
+func (a *app) engineFor(name string, timeout time.Duration) (portscan.Scanner, string, error) {
+	choice := portscan.EngineChoice{
+		Name:    name,
+		Timeout: timeout,
+		Notice:  func(msg string) { fmt.Fprintln(a.out, a.style.Yellow(msg)) },
+	}
+	scanner, resolved, err := choice.Scanner()
+	if err != nil {
+		return nil, "", err
+	}
+	// The connect engine keeps the flat host:port fan-out, which is faster for
+	// it; only the per-host engines are handed to ScanHosts.
+	if resolved == portscan.EngineConnect {
+		return nil, resolved, nil
+	}
+	return scanner, resolved, nil
 }
 
 // saveRun persists the finished report so `stik-net topo --from` can redraw it
@@ -190,6 +219,7 @@ type auditConfig struct {
 	timeout     time.Duration
 	concurrency int
 	failOn      model.Severity
+	engine      string
 }
 
 func parseAuditFlags(args []string) (auditConfig, error) {
@@ -253,6 +283,12 @@ func parseAuditFlags(args []string) (auditConfig, error) {
 				return cfg, fmt.Errorf("--concurrency: want a positive integer, got %q", v)
 			}
 			cfg.concurrency = n
+		case a == "--engine" || strings.HasPrefix(a, "--engine="):
+			v, err := valueOf(a, "--engine", &i, args)
+			if err != nil {
+				return cfg, err
+			}
+			cfg.engine = v
 		case a == "--fail-on" || strings.HasPrefix(a, "--fail-on="):
 			v, err := valueOf(a, "--fail-on", &i, args)
 			if err != nil {

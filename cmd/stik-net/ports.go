@@ -47,9 +47,16 @@ func (a *app) cmdPorts(rest []string) error {
 		reg = loaded
 	}
 
-	fmt.Fprintf(a.out, "%s scope %s (%s), %d ports\n",
+	// Resolve the engine before anything is sent: an unusable --engine must fail
+	// before the first packet, and a fallback must be visible from the start.
+	engine, engineName, err := a.engineFor(cfg.engine, cfg.timeout)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(a.out, "%s scope %s (%s), %d ports, %s engine\n",
 		a.style.Green("stik-net ports"), a.style.Cyan(auth.Source()),
-		a.style.Dim(auth.Fingerprint()), len(cfg.ports))
+		a.style.Dim(auth.Fingerprint()), len(cfg.ports), engineName)
 
 	ctx, cancel := signalContext()
 	defer cancel()
@@ -67,6 +74,7 @@ func (a *app) cmdPorts(rest []string) error {
 		Ports:       cfg.ports,
 		Timeout:     cfg.timeout,
 		Concurrency: cfg.concurrency,
+		Engine:      engine,
 	})
 
 	var fpElapsed time.Duration
@@ -77,9 +85,9 @@ func (a *app) cmdPorts(rest []string) error {
 	}
 
 	printPortResults(a, reg, scanned)
-	fmt.Fprintf(a.out, "\n%s %d host(s), %d open port(s) across %d probed — discovery %s, scan %s",
+	fmt.Fprintf(a.out, "\n%s %d host(s), %d open port(s) across %d probed — discovery %s, %s scan %s",
 		a.style.Bold("done —"), sstats.Hosts, sstats.Open, sstats.Ports,
-		dstats.Elapsed.Round(time.Millisecond), sstats.Elapsed.Round(time.Millisecond))
+		dstats.Elapsed.Round(time.Millisecond), engineName, sstats.Elapsed.Round(time.Millisecond))
 	if fpElapsed > 0 {
 		fmt.Fprintf(a.out, ", fingerprint %s", fpElapsed.Round(time.Millisecond))
 	}
@@ -166,6 +174,7 @@ type portsConfig struct {
 	timeout     time.Duration
 	concurrency int
 	fingerprint bool
+	engine      string
 }
 
 func parsePortsFlags(args []string) (portsConfig, error) {
@@ -205,6 +214,12 @@ func parsePortsFlags(args []string) (portsConfig, error) {
 			full = true
 		case a == "--no-fingerprint":
 			cfg.fingerprint = false
+		case a == "--engine" || strings.HasPrefix(a, "--engine="):
+			v, err := valueOf(a, "--engine", &i, args)
+			if err != nil {
+				return cfg, err
+			}
+			cfg.engine = v
 		case a == "--timeout" || strings.HasPrefix(a, "--timeout="):
 			v, err := valueOf(a, "--timeout", &i, args)
 			if err != nil {
