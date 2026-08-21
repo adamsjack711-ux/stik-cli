@@ -291,3 +291,106 @@ func TestSYNScanLive(t *testing.T) {
 		t.Errorf("closed port %d = %q, want closed", closed, byPort[closed])
 	}
 }
+
+func TestTrackerSignalsOnlyWhenEveryPortHasAnswered(t *testing.T) {
+	tr := newSYNTracker([]int{22, 80})
+
+	select {
+	case <-tr.answered():
+		t.Fatal("signalled before any reply arrived")
+	default:
+	}
+
+	tr.record(22, model.StateOpen)
+	select {
+	case <-tr.answered():
+		t.Fatal("signalled with one port still outstanding — the scan would cut its own reply window short")
+	default:
+	}
+
+	tr.record(80, model.StateClosed)
+	select {
+	case <-tr.answered():
+	case <-time.After(time.Second):
+		t.Fatal("never signalled, so the scan sits out the full timeout for nothing")
+	}
+}
+
+func TestTrackerIgnoresRepliesForPortsWeNeverAsked(t *testing.T) {
+	// A stray reply must not complete the wait on another port's behalf.
+	tr := newSYNTracker([]int{22})
+	tr.record(3389, model.StateOpen)
+	select {
+	case <-tr.answered():
+		t.Fatal("a reply for an unrequested port ended the wait")
+	default:
+	}
+	for _, svc := range tr.services() {
+		if svc.Port == 3389 {
+			t.Error("an unrequested port appeared in the results")
+		}
+	}
+	if len(tr.services()) != 1 {
+		t.Errorf("services = %d, want only the requested port", len(tr.services()))
+	}
+}
+
+func TestTrackerWithNoPortsIsAlreadyDone(t *testing.T) {
+	select {
+	case <-newSYNTracker(nil).answered():
+	default:
+		t.Fatal("an empty port list should not make the scan wait at all")
+	}
+}
+
+// TestSYNScanLiveFiltered checks the state only this engine can genuinely
+// observe: a SYN went out and nothing at all came back. It targets TEST-NET-2
+// (RFC 5737), reserved for documentation and routed nowhere, so the probe falls
+// into a black hole rather than reaching a real host. Root-only, like the scan.
+func TestSYNScanLiveFiltered(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("SYN scanning needs root; skipping the live filtered test")
+	}
+	if err := Available(); err != nil {
+		t.Skipf("raw sockets or pcap unavailable: %v", err)
+	}
+	if testing.Short() {
+		t.Skip("this test waits out a real timeout")
+	}
+
+	svcs, err := (&SYNScanner{Timeout: 500 * time.Millisecond, Retries: 1}).
+		Scan(context.Background(), "198.51.100.7", []int{80})
+	if err != nil {
+		t.Fatalf("syn scan: %v", err)
+	}
+	if len(svcs) != 1 || svcs[0].State != model.StateFiltered {
+		t.Fatalf("state = %+v, want filtered — silence is the observation", svcs)
+	}
+}
+
+// TestSYNScanLiveStopsWhenEveryPortAnswers guards the fix for a scan that sat
+// out its full timeout after the last reply had already arrived.
+func TestSYNScanLiveStopsWhenEveryPortAnswers(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("SYN scanning needs root; skipping")
+	}
+	if err := Available(); err != nil {
+		t.Skipf("raw sockets or pcap unavailable: %v", err)
+	}
+
+	open, closed := openPort(t), closedPort(t)
+	const timeout = 3 * time.Second
+
+	start := time.Now()
+	if _, err := (&SYNScanner{Timeout: timeout}).
+		Scan(context.Background(), "127.0.0.1", []int{open, closed}); err != nil {
+		t.Fatalf("syn scan: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	// Both ports answer immediately on loopback, so the scan has no reason to
+	// wait; anything near the timeout means it waited for replies it already had.
+	if elapsed > timeout/2 {
+		t.Errorf("scan took %s with a %s timeout — it sat out the reply window after every port had answered", elapsed.Round(time.Millisecond), timeout)
+	}
+}
