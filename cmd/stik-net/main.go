@@ -5,10 +5,30 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
+
+// exitCode is an error that carries a process exit status instead of a message.
+// `audit` uses it to signal "the run worked, and what it found is bad enough to
+// fail a pipeline" — distinct from an error, which is always 2.
+type exitCode int
+
+func (c exitCode) Error() string { return "exit status " + strconv.Itoa(int(c)) }
+
+// codedError is an error that still gets reported, but with a chosen exit
+// status. audit uses it so a broken scope file (2) can't be mistaken by a
+// pipeline for a scan that found something (1).
+type codedError struct {
+	code int
+	err  error
+}
+
+func (c codedError) Error() string { return c.err.Error() }
+func (c codedError) Unwrap() error { return c.err }
 
 // version is overridable at build time with -ldflags "-X main.version=...".
 var version = "dev"
@@ -66,6 +86,8 @@ func run(args []string) int {
 		err = a.cmdDiscover(rest)
 	case "ports":
 		err = a.cmdPorts(rest)
+	case "audit":
+		err = a.cmdAudit(rest)
 	case "daemon":
 		err = a.cmdDaemon(notifySpecs)
 	case "service":
@@ -81,12 +103,21 @@ func run(args []string) int {
 	}
 
 	if err != nil {
+		var code exitCode
+		if errors.As(err, &code) {
+			return int(code) // already reported by the command itself
+		}
+		status := 1
+		var coded codedError
+		if errors.As(err, &coded) {
+			status = coded.code
+		}
 		if msg, ok := friendlyError(a.style, err); ok {
 			fmt.Fprintln(os.Stderr, msg)
-			return 1
+			return status
 		}
 		fmt.Fprintln(os.Stderr, "stik-net: "+err.Error())
-		return 1
+		return status
 	}
 	return 0
 }
@@ -100,6 +131,7 @@ Usage:
   stik-net watch        live view; new devices highlight as they appear
   stik-net discover     active host sweep of an authorized scope (needs --scope)
   stik-net ports [tgt]  connect-scan open ports and identify the services (needs --scope)
+  stik-net audit [tgt]  full pass: discover, scan, fingerprint, rank findings (needs --scope)
   stik-net daemon       background watcher; alerts on a new device, rogue DHCP, or ARP spoofing
   stik-net service ...  install/uninstall/status the boot service (needs sudo)
   stik-net name <who>   name a device (by name, hostname, IP, or MAC)
@@ -113,11 +145,14 @@ Flags:
                       https://…               POST the event as JSON to a webhook
                     Or set STIK_NOTIFY=target1,target2 in the environment.
   --no-fingerprint  ports: list open ports only; don't identify the services
+  --out <file>      audit: also write the self-contained HTML report here
+  --fail-on <sev>   audit: exit 1 when a finding reaches this severity (default high)
+                    audit exits 0 when clean, 1 on findings, 2 if the run failed
   --help, -h        this help
   --version, -V     version
 
 The watcher (status, devices, watch, daemon) is passive: listen-only, broadcast/
-multicast traffic only, for networks you own. The active auditor (discover,
-ports) only runs against targets you list in an explicit --scope file, and
+multicast traffic only, for networks you own. The active auditor (discover, ports,
+audit) only runs against targets you list in an explicit --scope file, and
 probes nothing outside it.
 `

@@ -1,6 +1,6 @@
 # stik
 
-**A passive watcher that tells you, in plain English, what's on your network — and taps you on the shoulder when something new shows up.**
+**A passive watcher that tells you, in plain English, what's on your network — and taps you on the shoulder when something new shows up. Plus an opt-in, scope-gated auditor for when you need to know what's exposed.**
 
 [![CI](https://github.com/adamsjack711-ux/stik-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/adamsjack711-ux/stik-cli/actions/workflows/ci.yml)
 [![Go 1.26+](https://img.shields.io/badge/go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
@@ -163,6 +163,14 @@ The daemon also watches for two tampering signals, both urgent:
 | `stik-net name <who>` | Name a device — match by name, hostname, IP, or MAC |
 | `stik-net forget <who>` | Remove a device from the registry |
 
+The commands above are the passive watcher. The three below are the **active auditor**, which sends packets and therefore refuses to run without an authorization file — see [Active audit](#active-audit-opt-in-and-scope-gated).
+
+| Command | What it does |
+|---|---|
+| `stik-net discover --scope <file>` | Sweep the authorized ranges for live hosts |
+| `stik-net ports [target] --scope <file>` | Connect-scan open ports and identify the services (`--no-fingerprint` for a quieter run) |
+| `stik-net audit [target] --scope <file>` | The full pass: discover → scan → fingerprint → ranked findings (`--out report.html`) |
+
 ```
 $ stik-net devices
 Known (4)
@@ -178,11 +186,46 @@ Known (4)
 
 ---
 
+## Active audit (opt-in, and scope-gated)
+
+The watcher tells you *what is normally here*. The auditor answers a different question — *what is reachable, and what about that should worry me* — and it can only do that by sending packets. So it is gated on an artifact, not a promise:
+
+```bash
+cat > auth.txt <<'SCOPE'
+# ranges I am authorized to scan
+192.168.1.0/24
+SCOPE
+
+stik-net audit --scope auth.txt --out report.html
+```
+
+Without `--scope`, every active command refuses to run. Every address is checked against the scope file before it is touched — by the sweep, by the port scan, and again by the fingerprint pass — so a target that arrives from anywhere else still can't be probed. The report records the scope file's path and a hash of its contents, which is what makes a run auditable after the fact: a verbal "I'm authorized" does not survive a scan reaching a host that turns out to belong to someone else.
+
+What the audit reports, it *observed*: an open port, a banner the service volunteered, the certificate it presented. It never logs in, never brute-forces, and never claims a CVE. Findings are ranked `critical` → `info`, each with the evidence behind it and a one-line fix, and the passive registry is joined in by IP so a finding reads **"Jack's NAS · 445/tcp"** rather than an address.
+
+```
+1 high  ·  2 medium
+
+HIGH  SMB reachable on the network
+  Jack's NAS (192.168.1.20) · 445/tcp  STIK-A004
+  SMB file sharing is reachable. It exposes shares and account names, and is the
+  classic lateral-movement path.
+  evidence: 445/tcp open — Samba 4.19.5
+  fix: Limit SMB to the hosts that need it; never expose it beyond the local network.
+```
+
+`--out report.html` also writes a self-contained HTML report — no scripts, no external stylesheets, nothing fetched when it opens — suitable for handing to someone else.
+
+Exit codes make it usable as a CI gate: **0** clean, **1** when a finding reaches `--fail-on` (default `high`), **2** when the run itself failed.
+
+---
+
 ## What stik can — and can't — see
 
 stik is deliberately narrow, and says so up front:
 
-- **Passive only.** It *listens*; it never transmits. No ARP scanning, no ARP spoofing, no port scanning. This is a hard line.
+- **The watcher is passive.** `stik-net`, `devices`, `watch`, `daemon` and `service` only *listen* — they never transmit. No ARP scanning, no ARP spoofing, no port scanning. That has not changed.
+- **The auditor is active, and never runs by accident.** `discover`, `ports` and `audit` do send packets, so they exist as separate commands that refuse to start without a `--scope` file naming what you are authorized to touch. Nothing outside that file is probed. If you never run those three, stik-net transmits nothing.
 - **Broadcast/multicast only.** On a switched network you physically cannot see other devices' unicast traffic — the switch doesn't forward it to your port. stik reads only the protocols every device on the LAN legitimately broadcasts: **ARP**, **mDNS** (5353), and **DHCP** (67/68).
 - **For networks you own.** Point it at your own home or lab network.
 
@@ -216,6 +259,10 @@ The prime directive: **output the conclusion, not the evidence.** A tool that pr
 On a switched network, one host cannot see another host's unicast traffic; the switch simply doesn't deliver it. The only ways around that are **port mirroring** (needs switch access you usually don't have) or **ARP spoofing** — telling every device you're the router so their traffic flows through you. Spoofing is an *attack* technique. stik will not do it.
 
 So stik confines itself to what any device on the LAN can legitimately hear: broadcast and multicast. That's a real limit, and stik states it plainly rather than overclaiming. Explaining the boundary you *chose not to cross* is the honest way to build a tool like this.
+
+### Authorization is a file, not a flag
+
+Every active-scanning tool asks you to promise you're allowed. A promise leaves nothing behind. stik-net requires a scope file listing the ranges you're cleared for, refuses to start without one, re-checks every address against it at each stage, and stamps the file's path and content hash into the report. The point is not to stop a determined operator — it's that the artifact which authorized the run outlives the run, and a scan that drifts onto someone else's host is prevented by the same mechanism that documents it.
 
 ### Why DHCP option ordering fingerprints an OS
 
