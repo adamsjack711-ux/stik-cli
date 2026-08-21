@@ -150,6 +150,9 @@ Flags:
                       ntfy://[server/]topic   push to an ntfy topic
                       https://…               POST the event as JSON to a webhook
                     Or set STIK_NOTIFY=target1,target2 in the environment.
+  --cve             audit: look identified services up at nvd.nist.gov. This is
+                    the ONLY feature that contacts the internet; it is off by
+                    default and says what it sends. NVD_API_KEY raises the limit.
   --udp             ports/audit: also probe a short list of UDP services
   --udp-ports <l>   ports/audit: probe these UDP ports instead of the default list
   --engine <name>   ports/audit: connect (default, unprivileged), syn (half-open,

@@ -3,7 +3,7 @@
 Status: draft for review · 2026-08-21
 Progress: M1 (scope + discover) ✅ · M2 (connect ports) ✅ · M3 (fingerprint) ✅ ·
 M4 (audit + report) ✅ · M5 (topology) ✅ · M6 (SYN engine) ✅ ·
-M7 re-audit diff ✅ · topo diff ✅ · UDP ✅ · M7 remainder (--cve) next
+M7 re-audit diff ✅ · topo diff ✅ · UDP ✅ · --cve ✅ — M1–M7 complete
 Author: Jack Adams-Lovell
 
 ## 1. Goal & non-goals
@@ -350,6 +350,33 @@ with devices — the last run is the baseline, and what matters is what changed.
   one second silently overwrote each other — which would have destroyed the
   baseline a diff compares against and made the next diff report "nothing
   changed" against itself. `SaveRun` now suffixes on collision.
+**M7, part four — `--cve` (shipped):**
+
+This is the only part of stik-net that contacts the internet, and the tension is
+real: everything else works on a network it does not trust. The OUI table is
+embedded rather than fetched, reports pull in no remote assets, and the passive
+watcher transmits nothing at all. So the rules are:
+
+- **Opt-in, and it says what it sends.** `--cve` prints, before querying, that
+  product and version names — not addresses, not host names — are going to NIST.
+  Someone auditing a network they were lent should not discover that afterwards.
+- **Cached for a week, on disk.** The first reason is disclosure, not rate
+  limits: a nightly re-audit of an unchanged network should tell a third party
+  nothing new. A test asserts the second run makes no request.
+- **Only fully identified services are looked up.** Product *and* version, and
+  only products in a small hand-checked CPE table. A wrong mapping does not
+  produce no answer — it produces confident wrong answers about somebody else's
+  software.
+- **Findings cap at high, never critical.** A CVE matched on version alone is a
+  lead to verify: the host may already carry a distro backport. The finding says
+  so in as many words.
+- **Grouped queries.** Ten identical nginx boxes cost one lookup — fewer
+  requests, and less disclosed about the shape of the network.
+- **NVD being down is not fatal.** Errors are collected and printed; a scan that
+  found real exposure is not thrown away because a third party was unreachable.
+- **Tested against a real response**, captured from the live API and committed
+  as a fixture. A stub only proves the parser agrees with my idea of the schema.
+
 **M7, part three — UDP (shipped):**
 
 UDP is a different problem from TCP, and pretending otherwise is how scanners
